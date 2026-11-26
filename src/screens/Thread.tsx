@@ -109,7 +109,7 @@ export default function Thread() {
   const liked = myLinks.filter((m) => Object.values(m.reactions ?? {}).includes('good')).length;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - var(--tabbar-h))' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - var(--tabbar-h) - env(safe-area-inset-top))' }}>
       <div style={{ padding: '10px 12px', borderBottom: '1px solid #1f1f26', display: 'flex', alignItems: 'center', gap: 10 }}>
         <button className="icon-btn" aria-label="Back to chats" onClick={() => nav('/')}><Icon name="back" size={18} stroke={2.5} /></button>
         <div className="col grow" style={{ gap: 0, minWidth: 0 }}>

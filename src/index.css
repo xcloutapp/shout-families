@@ -28,7 +28,11 @@ button, input, select { font-family: inherit; font-size: inherit; color: inherit
 button { cursor: pointer; }
 h1, h2, .display { font-family: 'Space Grotesk', Inter, sans-serif; font-weight: 700; margin: 0; }
 
-.app { max-width: 480px; margin: 0 auto; min-height: 100%; display: flex; flex-direction: column; }
+.app { max-width: 480px; margin: 0 auto; min-height: 100%; display: flex; flex-direction: column; padding-top: env(safe-area-inset-top); }
+/* Keeps content from showing behind the clock and notch on iPhone. */
+body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); background: var(--bg); z-index: 15; }
+/* Screen headers with back buttons stay at the top while you scroll. */
+.head { position: sticky; top: env(safe-area-inset-top); z-index: 5; background: var(--bg); margin: -16px -20px 0; padding: 10px 20px; }
 .screen { flex: 1; padding: 16px 20px 24px; display: flex; flex-direction: column; gap: 16px; }
 .app:has(.tabbar) { padding-bottom: var(--tabbar-h); }
 .screen.with-tabs { padding-bottom: 24px; }
@@ -73,7 +77,7 @@ h1, h2, .display { font-family: 'Space Grotesk', Inter, sans-serif; font-weight:
 .tab.plus { width: 56px; height: 56px; border-radius: 18px; background: var(--accent); color: var(--accent-ink); }
 
 .sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 20; display: flex; align-items: flex-end; justify-content: center; animation: fade .15s ease-out; }
-.sheet { width: 100%; max-width: 480px; background: var(--surface-2); border-radius: 28px 28px 0 0; padding: 12px 20px calc(24px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 16px; animation: up .2s ease-out; max-height: 90vh; overflow: auto; }
+.sheet { width: 100%; max-width: 480px; background: var(--surface-2); border-radius: 28px 28px 0 0; padding: 12px 20px calc(24px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 16px; animation: up .2s ease-out; max-height: calc(100dvh - env(safe-area-inset-top) - 24px); overflow: auto; overscroll-behavior: contain; }
 .grabber { width: 40px; height: 5px; border-radius: 3px; background: var(--line-2); align-self: center; }
 .tile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .tile { text-align: left; border: none; border-radius: 20px; padding: 16px; min-height: 112px; display: flex; flex-direction: column; justify-content: space-between; }

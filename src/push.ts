@@ -20,6 +20,9 @@ export function registerSW() {
   return reg;
 }
 
+/** Permission given, but this phone isn't subscribed yet. */
+export const pushHalfDone = () => typeof Notification !== 'undefined' && Notification.permission === 'granted';
+
 export async function pushState(): Promise<PushState> {
   if (isIOS() && !isStandalone()) return 'install';
   if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return 'unsupported';
@@ -87,6 +90,8 @@ export async function refreshPush() {
     const r = await registerSW();
     const sub = await r?.pushManager.getSubscription();
     if (sub) await saveSub(sub);
+    // Permission was given but setup didn't finish last time: finish it now.
+    else await turnOnPush();
   } catch {
     /* ignore */
   }

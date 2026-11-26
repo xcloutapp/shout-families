@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { pushState, sendTestPush, turnOffPush, turnOnPush, type PushState } from '../push';
+import { pushHalfDone, pushState, sendTestPush, turnOffPush, turnOnPush, type PushState } from '../push';
 import { Sheet, useToast } from '../ui';
 
 const DISMISS = 'shout-push-dismissed';
@@ -90,14 +90,16 @@ export function NotifyBanner() {
 export function NotifySettings() {
   const [state, setState] = usePushState();
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
   const toast = useToast();
 
   const run = async (f: () => Promise<unknown>) => {
     setBusy(true);
+    setErr('');
     try {
       await f();
     } catch (e) {
-      toast.show((e as Error).message || 'Something went wrong');
+      setErr((e as Error).message || 'Something went wrong');
     } finally {
       setBusy(false);
     }
@@ -115,7 +117,9 @@ export function NotifySettings() {
     <div className="card">
       <div className="label">Notifications</div>
       <div className="between" style={{ gap: 10 }}>
-        <span style={{ color: 'var(--text-2)', fontSize: 15 }}>{state ? label[state] : '…'}</span>
+        <span style={{ color: 'var(--text-2)', fontSize: 15 }}>
+          {!state ? '…' : state === 'off' && pushHalfDone() ? 'Almost done. Tap Turn on to finish' : busy ? 'Setting up…' : label[state]}
+        </span>
         {state === 'off' && (
           <button className="btn primary" disabled={busy} onClick={() => run(async () => {
             const s = await turnOnPush();
@@ -130,6 +134,7 @@ export function NotifySettings() {
           })}>Turn off</button>
         )}
       </div>
+      {err && <span style={{ color: '#ff8a7a', fontSize: 14 }}>{err}</span>}
       {state === 'install' && <InstallSteps />}
       {state === 'on' && (
         <button className="btn quiet" disabled={busy} style={{ alignSelf: 'flex-start' }} onClick={() => run(async () => {

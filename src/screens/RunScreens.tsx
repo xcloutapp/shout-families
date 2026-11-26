@@ -46,7 +46,7 @@ export function AddOrder({ card: c }: { card: RunCard }) {
 
   return (
     <div className="screen">
-      <div className="row">
+      <div className="row head">
         <button className="icon-btn" aria-label="Back" onClick={() => nav(-1)}><Icon name="back" size={18} stroke={2.5} /></button>
         <div className="col" style={{ gap: 2 }}>
           <span className="muted">{c.createdBy === s.me.id ? 'Your run' : `${buyer.name}'s going to`}</span>
@@ -157,7 +157,7 @@ export function BuyerList({ card: c }: { card: RunCard }) {
 
   return (
     <div className="screen">
-      <div className="between">
+      <div className="between head">
         <button className="icon-btn" aria-label="Back" onClick={() => nav(-1)}><Icon name="back" size={18} stroke={2.5} /></button>
         <span className="tag" style={{ color: c.locked ? 'var(--green)' : 'var(--accent)', background: c.locked ? '#1a2621' : '#2a1a12', padding: '6px 10px', borderRadius: 999 }}>
           {c.locked ? 'Locked in' : `Open · closes in ${timeLeft(c.due)}`}

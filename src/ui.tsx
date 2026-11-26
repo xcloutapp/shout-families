@@ -105,7 +105,7 @@ export function Avatar({ person, size = 54, ring, dim }: { person: Person; size?
 export function TopBar({ title, tag, tagColor = 'var(--accent)' }: { title?: string; tag?: string; tagColor?: string }) {
   const nav = useNavigate();
   return (
-    <div className="between">
+    <div className="between head">
       <button className="icon-btn" aria-label="Back" onClick={() => nav(-1)}>
         <Icon name="back" size={18} stroke={2.5} />
       </button>
