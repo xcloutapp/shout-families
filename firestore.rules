@@ -56,6 +56,9 @@ service cloud.firestore {
           allow delete: if inChat() && resource.data.authorId == request.auth.uid;
         }
       }
+      match /invites/{inviteId} {
+        allow read, write: if isMember(gid);
+      }
       match /photos/{photoId} {
         allow read, write: if isMember(gid);
       }

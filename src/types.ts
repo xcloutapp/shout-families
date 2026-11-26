@@ -26,6 +26,7 @@ export interface UserDoc {
   adult: boolean;
   groupIds: string[];
   activeGroupId?: string;
+  groupNames?: Record<string, string>;
   usuals?: Record<string, string[]>;
   phrases?: Record<string, number>;
   places?: string[];

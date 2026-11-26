@@ -1,6 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { clock, logOut, money, moneyBalances, switchGroup, useSession, useStore } from '../store';
+import { clock, createGroup, joinGroup, logOut, money, moneyBalances, switchGroup, useSession, useStore } from '../store';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase';
+import type { GroupType } from '../types';
 import { Profile } from './Setup';
 import { Avatar, Sheet, TabBar, useToast } from '../ui';
 
@@ -162,26 +165,68 @@ export function Calendar() {
   );
 }
 
+interface Invite {
+  id: string;
+  name: string;
+  createdBy: string;
+  createdAt: number;
+  status: 'pending' | 'accepted';
+  acceptedBy?: string;
+  acceptedName?: string;
+  acceptedAt?: number;
+}
+
+const shortDate = (t: number) => new Date(t).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+
 export function Me() {
   const s = useStore();
   const { userDoc } = useSession();
   const toast = useToast();
   const [editing, setEditing] = useState(false);
-  const link = `${location.origin}${location.pathname}#/join/${s.group.id}`;
+  const [inviting, setInviting] = useState(false);
+  const [inviteName, setInviteName] = useState('');
+  const [invites, setInvites] = useState<Invite[]>([]);
+  const [groupNames, setGroupNames] = useState<Record<string, string>>({});
+  const [newGroup, setNewGroup] = useState(false);
+  const [gName, setGName] = useState('');
+  const [gType, setGType] = useState<GroupType>('mates');
+  const [joining, setJoining] = useState(false);
+  const [joinLink, setJoinLink] = useState('');
+
+  useEffect(() => onSnapshot(s.invitesCol(), (q) => setInvites(q.docs.map((d) => ({ ...(d.data() as Invite), id: d.id }))), () => {}),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [s.group.id]);
+  useEffect(() => {
+    (userDoc?.groupIds ?? []).forEach((g) =>
+      getDoc(doc(db, 'groups', g)).then((d) => d.exists() && setGroupNames((x) => ({ ...x, [g]: (d.data() as { name: string }).name }))).catch(() => {}),
+    );
+  }, [userDoc?.groupIds]);
+
   if (editing) return <Profile editing onDone={() => setEditing(false)} />;
 
-  const share = async () => {
-    const text = `Join ${s.group.name} on Shout`;
+  const shareLink = async (url: string, who?: string) => {
+    const text = who ? `${who}, join ${s.group.name} on Shout` : `Join ${s.group.name} on Shout`;
     try {
-      if (navigator.share) await navigator.share({ title: 'Shout', text, url: link });
+      if (navigator.share) await navigator.share({ title: 'Shout', text, url });
       else {
-        await navigator.clipboard.writeText(link);
+        await navigator.clipboard.writeText(`${text}: ${url}`);
         toast.show('Invite link copied');
       }
     } catch {
       /* cancelled */
     }
   };
+
+  const sendInvite = async () => {
+    const name = inviteName.trim();
+    const url = await s.createInvite(name);
+    setInviting(false);
+    setInviteName('');
+    await shareLink(url, name);
+  };
+
+  const pending = invites.filter((i) => i.status === 'pending');
+  const accepted = invites.filter((i) => i.status === 'accepted');
 
   return (
     <>
@@ -199,40 +244,115 @@ export function Me() {
         </div>
 
         <div className="card">
-          <div className="between">
-            <div className="col" style={{ gap: 2 }}>
-              <b>{s.group.name}</b>
-              <span className="muted">{s.members.length} member{s.members.length === 1 ? '' : 's'} · owner {s.person(s.group.ownerId).name}</span>
-            </div>
+          <div className="col" style={{ gap: 2 }}>
+            <b>{s.group.name}</b>
+            <span className="muted">{s.members.length} member{s.members.length === 1 ? '' : 's'} · owner {s.person(s.group.ownerId).name}</span>
           </div>
-          <button className="btn primary" onClick={share}>Invite people</button>
-          {s.members.map((p) => (
-            <div key={p.id} className="between" style={{ borderTop: '1px solid var(--chip)', paddingTop: 10 }}>
-              <div className="row">
-                <Avatar person={p} size={36} />
-                <span>{p.name}{p.id === s.me.id ? ' (you)' : ''}</span>
+          <button className="btn primary" onClick={() => setInviting(true)}>Invite people</button>
+
+          <div className="label" style={{ marginTop: 6 }}>In the group</div>
+          {s.members.map((p) => {
+            const inv = accepted.find((i) => i.acceptedBy === p.id);
+            return (
+              <div key={p.id} className="between">
+                <div className="row">
+                  <Avatar person={p} size={36} />
+                  <span className="col" style={{ gap: 0 }}>
+                    <span>{p.name}{p.id === s.me.id ? ' (you)' : ''}</span>
+                    <span className="muted" style={{ fontSize: 12 }}>
+                      {p.id === s.group.ownerId ? 'Owner' : inv ? `Accepted ${shortDate(inv.acceptedAt ?? inv.createdAt)}` : 'Joined'}
+                    </span>
+                  </span>
+                </div>
+                {s.isOwner && p.id !== s.me.id ? (
+                  <button className={`pill ${p.adult ? '' : 'on'}`} onClick={() => s.setAdult(p.id, !p.adult)}>{p.adult ? 'Adult' : 'Under 18'}</button>
+                ) : (
+                  <span className="muted">{p.adult ? 'Adult' : 'Under 18'}</span>
+                )}
               </div>
-              {s.isOwner && p.id !== s.me.id ? (
-                <button className={`pill ${p.adult ? '' : 'on'}`} onClick={() => s.setAdult(p.id, !p.adult)}>{p.adult ? 'Adult' : 'Under 18'}</button>
-              ) : (
-                <span className="muted">{p.adult ? 'Adult' : 'Under 18'}</span>
-              )}
+            );
+          })}
+
+          {pending.length > 0 && <div className="label" style={{ marginTop: 6 }}>Invited, not joined yet</div>}
+          {pending.map((i) => (
+            <div key={i.id} className="between">
+              <div className="row">
+                <span style={{ width: 36, height: 36, borderRadius: 18, border: '2px dashed #3a3a44', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontWeight: 700 }}>{(i.name || '?')[0]}</span>
+                <span className="col" style={{ gap: 0 }}>
+                  <span>{i.name || 'Open invite'}</span>
+                  <span className="muted" style={{ fontSize: 12 }}>Pending · sent {shortDate(i.createdAt)} by {i.createdBy === s.me.id ? 'you' : s.person(i.createdBy).name}</span>
+                </span>
+              </div>
+              <div className="row" style={{ gap: 4 }}>
+                <button className="pill" style={{ minHeight: 34, fontSize: 13 }} onClick={() => shareLink(s.inviteLink(i.id), i.name)}>Resend</button>
+                <button className="pill" style={{ minHeight: 34, fontSize: 13 }} aria-label={`Cancel invite for ${i.name}`} onClick={() => s.cancelInvite(i.id)}>Cancel</button>
+              </div>
             </div>
           ))}
           {s.isOwner && <span className="muted">As the owner, you can change who counts as under 18.</span>}
         </div>
 
-        {(userDoc?.groupIds.length ?? 0) > 1 && (
-          <div className="card">
-            <div className="label">Your groups</div>
-            {userDoc!.groupIds.map((g) => (
-              <button key={g} className={`pill ${g === s.group.id ? 'on' : ''}`} onClick={() => switchGroup(g)}>{g === s.group.id ? s.group.name : 'Switch to another group'}</button>
-            ))}
+        <div className="card">
+          <div className="label">Your groups</div>
+          {(userDoc?.groupIds ?? []).map((g) => (
+            <button key={g} className="between" onClick={() => g !== s.group.id && switchGroup(g)} style={{ background: 'none', border: 'none', padding: '6px 0', textAlign: 'left' }}>
+              <span style={{ fontWeight: g === s.group.id ? 700 : 400 }}>{g === s.group.id ? s.group.name : userDoc?.groupNames?.[g] ?? groupNames[g] ?? 'Group'}</span>
+              <span className="muted">{g === s.group.id ? 'Open now' : 'Switch'}</span>
+            </button>
+          ))}
+          <div className="row">
+            <button className="btn ghost grow" onClick={() => setNewGroup(true)}>New group</button>
+            <button className="btn ghost grow" onClick={() => setJoining(true)}>Join with a link</button>
           </div>
-        )}
+          <span className="muted">Make separate groups for family, your share house or mates. Each has its own chats and balances.</span>
+        </div>
 
         <button className="btn ghost" onClick={logOut}>Sign out</button>
       </div>
+
+      {inviting && (
+        <Sheet onClose={() => setInviting(false)}>
+          <h2 style={{ fontSize: 22 }}>Who are you inviting?</h2>
+          <input className="input" autoFocus placeholder="Their name, e.g. Katrina" value={inviteName} onChange={(e) => setInviteName(e.target.value)} />
+          <span className="muted">Each person gets their own link, so you can see who has joined and who hasn't.</span>
+          <button className="btn big primary" disabled={!inviteName.trim()} onClick={sendInvite}>Send invite</button>
+        </Sheet>
+      )}
+
+      {newGroup && (
+        <Sheet onClose={() => setNewGroup(false)}>
+          <h2 style={{ fontSize: 22 }}>New group</h2>
+          <div className="row">
+            {(['family', 'house', 'mates'] as GroupType[]).map((k) => (
+              <button key={k} className={`pill grow ${gType === k ? 'on' : ''}`} onClick={() => setGType(k)}>{k === 'family' ? 'Family' : k === 'house' ? 'House' : 'Mates'}</button>
+            ))}
+          </div>
+          <input className="input" placeholder={gType === 'house' ? 'e.g. 12 Smith St' : gType === 'mates' ? 'e.g. Saturday crew' : 'e.g. The Clouts'} value={gName} onChange={(e) => setGName(e.target.value)} />
+          <button className="btn big primary" disabled={!gName.trim()} onClick={async () => {
+            await createGroup(gName.trim(), gType);
+            setNewGroup(false);
+            setGName('');
+            toast.show('Group created. Invite people from here.');
+          }}>Create group</button>
+        </Sheet>
+      )}
+
+      {joining && (
+        <Sheet onClose={() => setJoining(false)}>
+          <h2 style={{ fontSize: 22 }}>Join a group</h2>
+          <input className="input" placeholder="Paste the invite link" value={joinLink} onChange={(e) => setJoinLink(e.target.value)} />
+          <button className="btn big primary" disabled={!joinLink.trim()} onClick={async () => {
+            const ref = joinLink.trim().split('#/join/').pop()?.replace(/[^A-Za-z0-9/]/g, '') ?? '';
+            const r = await joinGroup(ref).catch(() => 'missing' as const);
+            if (r === 'missing') toast.show('Couldn\u2019t find that group');
+            else {
+              setJoining(false);
+              setJoinLink('');
+              toast.show(r === 'already' ? 'You\u2019re already in that group' : 'Joined');
+            }
+          }}>Join</button>
+        </Sheet>
+      )}
       {toast.node}
       <TabBar />
     </>

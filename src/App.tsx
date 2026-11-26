@@ -24,7 +24,7 @@ import { GroupSetup, Loading, Profile, SignIn, rememberJoin } from './screens/Se
 }
 
 // Catch invite links (#/join/<groupId>) before anything else renders.
-const m = location.hash.match(/^#\/join\/([A-Za-z0-9]+)/);
+const m = location.hash.match(/^#\/join\/([A-Za-z0-9]+(?:\/[A-Za-z0-9]+)?)/);
 if (m) {
   rememberJoin(m[1]);
   history.replaceState(null, '', `${location.pathname}#/`);

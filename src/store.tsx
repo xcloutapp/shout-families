@@ -158,11 +158,13 @@ export async function createGroup(name: string, type: GroupType) {
     createdAt: Date.now(),
   };
   await setDoc(ref, group);
-  await updateDoc(doc(db, 'users', u.uid), { groupIds: arrayUnion(ref.id), activeGroupId: ref.id });
+  await updateDoc(doc(db, 'users', u.uid), { groupIds: arrayUnion(ref.id), activeGroupId: ref.id, [`groupNames.${ref.id}`]: name });
   return ref.id;
 }
 
-export async function joinGroup(groupId: string): Promise<'joined' | 'already' | 'missing'> {
+/** Accepts "groupId" or "groupId/inviteId" (from a named invite link). */
+export async function joinGroup(joinRef: string): Promise<'joined' | 'already' | 'missing'> {
+  const [groupId, inviteId] = joinRef.split('/');
   const u = auth.currentUser!;
   const me = (await getDoc(doc(db, 'users', u.uid))).data() as UserDoc;
   const ref = doc(db, 'groups', groupId);
@@ -178,10 +180,14 @@ export async function joinGroup(groupId: string): Promise<'joined' | 'already' |
     return 'joined' as const;
   });
   if (result !== 'missing') {
-    await updateDoc(doc(db, 'users', u.uid), { groupIds: arrayUnion(groupId), activeGroupId: groupId });
+    const gname = ((await getDoc(doc(db, 'groups', groupId))).data() as { name?: string } | undefined)?.name ?? 'Group';
+    await updateDoc(doc(db, 'users', u.uid), { groupIds: arrayUnion(groupId), activeGroupId: groupId, [`groupNames.${groupId}`]: gname });
     // Join every "everyone" chat in the group.
     const everyone = await getDocs(query(collection(db, 'groups', groupId, 'chats'), where('everyone', '==', true)));
     for (const c of everyone.docs) await updateDoc(c.ref, { memberIds: arrayUnion(u.uid) }).catch(() => {});
+    if (inviteId && result === 'joined') {
+      await updateDoc(doc(db, 'groups', groupId, 'invites', inviteId), { status: 'accepted', acceptedBy: u.uid, acceptedName: me.name, acceptedAt: Date.now() }).catch(() => {});
+    }
   }
   return result;
 }
@@ -308,6 +314,14 @@ export function useStore() {
     },
     phrases: userDoc.phrases ?? {},
     places: userDoc.places ?? [],
+    async createInvite(name: string): Promise<string> {
+      const ref = doc(collection(db, 'groups', gid, 'invites'));
+      await setDoc(ref, { name: name.trim(), createdBy: meId, createdAt: Date.now(), status: 'pending' });
+      return `${location.origin}${location.pathname}#/join/${gid}/${ref.id}`;
+    },
+    inviteLink: (inviteId: string) => `${location.origin}${location.pathname}#/join/${gid}/${inviteId}`,
+    cancelInvite: (inviteId: string) => deleteDoc(doc(db, 'groups', gid, 'invites', inviteId)),
+    invitesCol: () => query(collection(db, 'groups', gid, 'invites'), orderBy('createdAt', 'desc')),
     async createChat(memberIds: PersonId[], name?: string) {
       const ref = doc(collection(db, 'groups', gid, 'chats'));
       const ids = [...new Set([meId, ...memberIds])];

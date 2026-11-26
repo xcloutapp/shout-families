@@ -123,7 +123,7 @@ export function GroupSetup() {
   }, []);
 
   const join = async () => {
-    const id = code.trim().split('/').pop() ?? '';
+    const id = code.trim().split('#/join/').pop()?.replace(/[^A-Za-z0-9/]/g, '') ?? '';
     setBusy(true);
     setMsg('');
     try {
