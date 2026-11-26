@@ -1,3 +1,4 @@
+import { NotifyBanner } from './Notify';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clock, useStore } from '../store';
@@ -92,6 +93,7 @@ export function ChatList() {
             <Icon name="pencil" size={20} stroke={2.2} />
           </button>
         </div>
+        <NotifyBanner />
         <PeopleRow onOpen={() => setPeople(true)} />
         <div style={{ borderTop: '1px solid #1f1f26', margin: '0 -20px' }}>
           {s.chats.map((c) => {

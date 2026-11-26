@@ -1,3 +1,4 @@
+import { NotifySettings } from './Notify';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createGroup, joinGroup, logOut, money, moneyBalances, switchGroup, useSession, useStore } from '../store';
@@ -242,6 +243,8 @@ export function Me() {
           </div>
           <span className="muted">Make separate groups for family, your share house or mates. Each has its own chats and balances.</span>
         </div>
+
+        <NotifySettings />
 
         <button className="btn ghost" onClick={logOut}>Sign out</button>
       </div>

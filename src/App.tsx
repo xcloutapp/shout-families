@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
+import { registerSW, refreshPush } from './push';
 import { HashRouter, Route, Routes } from 'react-router-dom';
-import { SessionProvider, joinGroup, useSession } from './store';
+import { SessionProvider, joinGroup, switchGroup, useSession } from './store';
 import CardScreen from './screens/CardScreen';
 import { LogShout } from './screens/Create';
 import { ChatList, NewChat } from './screens/Chats';
@@ -32,8 +33,37 @@ if (m) {
   history.replaceState(null, '', `${location.pathname}#/`);
 }
 
+registerSW();
+
 function Gate() {
-  const { phase } = useSession();
+  const { phase, userDoc } = useSession();
+
+  // Notifications: keep this phone's subscription fresh, clear the badge when opened,
+  // and open the right group when a notification for another group is tapped (#/chat/x?g=<group>).
+  useEffect(() => {
+    if (phase !== 'ready') return;
+    const check = () => {
+      const g = new URLSearchParams(location.hash.split('?')[1] ?? '').get('g');
+      if (g && userDoc?.activeGroupId !== g && userDoc?.groupIds?.includes(g)) switchGroup(g).catch(() => {});
+    };
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type === 'open' && typeof e.data.url === 'string') {
+        location.href = e.data.url;
+        check();
+      }
+    };
+    const onVis = () => document.visibilityState === 'visible' && refreshPush();
+    check();
+    refreshPush();
+    window.addEventListener('hashchange', check);
+    document.addEventListener('visibilitychange', onVis);
+    navigator.serviceWorker?.addEventListener('message', onMsg);
+    return () => {
+      window.removeEventListener('hashchange', check);
+      document.removeEventListener('visibilitychange', onVis);
+      navigator.serviceWorker?.removeEventListener('message', onMsg);
+    };
+  }, [phase, userDoc?.activeGroupId, userDoc?.groupIds]);
 
   // Already in a group and opened an invite to another one: join it.
   useEffect(() => {

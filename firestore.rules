@@ -10,6 +10,19 @@ service cloud.firestore {
     // Each person's own profile and saved usuals.
     match /users/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;
+
+      // This person's phones that get notifications.
+      match /push/{subId} {
+        allow read, delete: if signedIn() && request.auth.uid == uid;
+        allow create, update: if signedIn() && request.auth.uid == uid
+          && request.resource.data.endpoint is string && request.resource.data.endpoint.matches('https://.*')
+          && request.resource.data.endpoint.size() < 1000;
+      }
+    }
+
+    // Server-only settings (notification signing keys). The app can never read these.
+    match /config/{doc} {
+      allow read, write: if false;
     }
 
     match /groups/{gid} {
