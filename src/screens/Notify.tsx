@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { pushHalfDone, pushState, sendTestPush, turnOffPush, turnOnPush, type PushState } from '../push';
+import { preloadPushKey, pushHalfDone, pushState, sendTestPush, turnOffPush, turnOnPush, type PushState } from '../push';
 import { Sheet, useToast } from '../ui';
 
 const DISMISS = 'shout-push-dismissed';
@@ -8,6 +8,7 @@ function usePushState() {
   const [state, setState] = useState<PushState | null>(null);
   useEffect(() => {
     pushState().then(setState).catch(() => setState('unsupported'));
+    preloadPushKey().catch(() => {});
   }, []);
   return [state, setState] as const;
 }
@@ -106,7 +107,7 @@ export function NotifySettings() {
   };
 
   const label: Record<PushState, string> = {
-    on: 'On for this phone',
+    on: 'On for this phone ✓',
     off: 'Off',
     install: 'Add Shout to your Home Screen first',
     blocked: 'Blocked. Turn them on in Settings › Notifications › Shout',
@@ -118,7 +119,7 @@ export function NotifySettings() {
       <div className="label">Notifications</div>
       <div className="between" style={{ gap: 10 }}>
         <span style={{ color: 'var(--text-2)', fontSize: 15 }}>
-          {!state ? '…' : state === 'off' && pushHalfDone() ? 'Almost done. Tap Turn on to finish' : busy ? 'Setting up…' : label[state]}
+          {!state ? '…' : state === 'off' && pushHalfDone() ? 'Not finished on this phone yet' : busy ? 'Setting up…' : label[state]}
         </span>
         {state === 'off' && (
           <button className="btn primary" disabled={busy} onClick={() => run(async () => {

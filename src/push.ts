@@ -55,19 +55,32 @@ async function saveSub(sub: PushSubscription) {
   });
 }
 
-/** Must be called from a tap (iPhone only allows asking then). */
+let keyP: Promise<string> | null = null;
+/** Fetch the server's public key early, so a tap can subscribe straight away (iPhone requires that). */
+export function preloadPushKey() {
+  keyP ??= getPublicKey().catch((e) => {
+    keyP = null;
+    throw e;
+  });
+  return keyP;
+}
+
+/** Must be called from a tap (iPhone only allows asking then), with as little waiting as possible before subscribe. */
 export async function turnOnPush(): Promise<PushState> {
   const state = await pushState();
   if (state === 'install' || state === 'unsupported' || state === 'blocked') return state;
-  const perm = await Notification.requestPermission();
-  if (perm !== 'granted') return perm === 'denied' ? 'blocked' : 'off';
   const r = await registerSW();
   if (!r) return 'unsupported';
-  await navigator.serviceWorker.ready;
   let sub = await r.pushManager.getSubscription();
   if (!sub) {
-    const publicKey = await getPublicKey();
-    sub = await r.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(publicKey) });
+    const publicKey = await preloadPushKey();
+    try {
+      // subscribe() shows the permission prompt itself if needed.
+      sub = await r.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(publicKey) });
+    } catch (e) {
+      if (Notification.permission === 'denied') return 'blocked';
+      throw new Error(`Couldn't finish setting up (${(e as Error).name || 'error'}). Tap Turn on again`);
+    }
   }
   await saveSub(sub);
   return 'on';
@@ -90,8 +103,7 @@ export async function refreshPush() {
     const r = await registerSW();
     const sub = await r?.pushManager.getSubscription();
     if (sub) await saveSub(sub);
-    // Permission was given but setup didn't finish last time: finish it now.
-    else await turnOnPush();
+    preloadPushKey().catch(() => {});
   } catch {
     /* ignore */
   }
