@@ -9,6 +9,20 @@ import GuestRun from './screens/Guest';
 import { Balances, Calendar, Me } from './screens/Tabs';
 import { GroupSetup, Loading, Profile, SignIn, rememberJoin } from './screens/Setup';
 
+// Shared into Shout from another app's share sheet (Android): ?url=…&text=…
+{
+  const q = new URLSearchParams(location.search);
+  const shared = q.get('url') || q.get('text');
+  if (shared) {
+    try {
+      sessionStorage.setItem('shout-shared', (q.get('url') ? q.get('url')! : shared).trim());
+    } catch {
+      /* ignore */
+    }
+    history.replaceState(null, '', `${location.pathname}#/chat/fun`);
+  }
+}
+
 // Catch invite links (#/join/<groupId>) before anything else renders.
 const m = location.hash.match(/^#\/join\/([A-Za-z0-9]+)/);
 if (m) {

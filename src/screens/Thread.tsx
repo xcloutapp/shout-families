@@ -205,7 +205,7 @@ function Bubble({ m, prev, cid, onHold, toast }: { m: Message; prev?: Message; c
             </div>
           )}
           {m.photoId && <Photo gid={s.group.id} id={m.photoId} press={press} />}
-          {m.link && <LinkCard m={m} cid={cid} />}
+          {m.link && <div {...press}><LinkCard m={m} cid={cid} /></div>}
           {card && <CardInline card={card} toast={toast} />}
           {m.note && <span style={{ fontSize: 12, color: '#ffb38a', fontWeight: 600 }}>{m.note}</span>}
           {mine && card && Date.now() - m.createdAt < 10 * 60000 && card.status === 'open' && (
@@ -483,6 +483,13 @@ function QuickActions({ m, cid, onClose, toast }: { m: Message; cid: string; onC
           ))}
         </div>
       </div>
+      {m.authorId === s.me.id && (
+        <button className="btn ghost" style={{ color: '#ff8a80', borderColor: '#4a2a2a' }} onClick={async () => {
+          await s.deleteMessage(cid, m);
+          toast('Message deleted');
+          onClose();
+        }}>Delete message</button>
+      )}
       <button className="btn quiet" onClick={onClose}>Close</button>
     </Sheet>
   );
@@ -520,7 +527,18 @@ function TokenOptions({ kind, onPick }: { kind: keyof Tokens; onPick: (v: string
 function Composer({ chat, toast }: { chat: Chat; toast: (s: string) => void }) {
   const s = useStore();
   const nav = useNavigate();
-  const [text, setText] = useState('');
+  const [text, setText] = useState(() => {
+    try {
+      const shared = sessionStorage.getItem('shout-shared');
+      if (shared && chat.kind === 'fun') {
+        sessionStorage.removeItem('shout-shared');
+        return shared;
+      }
+    } catch {
+      /* ignore */
+    }
+    return '';
+  });
   const [tokens, setTokens] = useState<Tokens>({});
   const [picked, setPicked] = useState(false);
   const [adding, setAdding] = useState<keyof Tokens | null>(null);
@@ -607,6 +625,19 @@ function Composer({ chat, toast }: { chat: Chat; toast: (s: string) => void }) {
         </div>
       )}
 
+      {chat.kind === 'fun' && !text && (
+        <div className="row" style={{ padding: '8px 12px 0', gap: 6 }}>
+          <button className="pill" style={{ minHeight: 34, fontSize: 13, background: '#1b1b21' }} onClick={async () => {
+            try {
+              const clip = await navigator.clipboard.readText();
+              if (detectLink(clip)) setText(clip.trim());
+              else toast('Copy a link first: in Instagram tap Share, then Copy link');
+            } catch {
+              toast('Tap and hold the text box, then Paste');
+            }
+          }}>Paste the link you copied</button>
+        </div>
+      )}
       {showChips && (
         <div className="row" style={{ padding: '8px 12px 0', gap: 6, overflowX: 'auto', scrollbarWidth: 'none' }}>
           {suggestions.map((x) => (

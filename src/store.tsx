@@ -275,6 +275,16 @@ export function useStore() {
     postCard,
     msgCol,
     updateMessage: (cid: string, mid: string, patch: Partial<Message>) => updateDoc(doc(msgCol(cid), mid), patch),
+    async deleteMessage(cid: string, m: Message) {
+      if (m.authorId !== meId) return;
+      const card = m.cardId ? sess.cards.find((c) => c.id === m.cardId) : undefined;
+      // A card nobody has used yet goes with the message.
+      if (card && card.createdBy === meId && card.status === 'open' && !(card.kind === 'run' && card.orders.length > 0)) {
+        await deleteDoc(cardRef(card.id)).catch(() => {});
+      }
+      if (m.photoId) await deleteDoc(doc(db, 'groups', gid, 'photos', m.photoId)).catch(() => {});
+      await deleteDoc(doc(msgCol(cid), m.id));
+    },
     clearCard: (cid: string, mid: string) => updateDoc(doc(msgCol(cid), mid), { cardId: deleteField(), dismissed: true }),
     guestCol: (token: string) => collection(db, 'shares', token, 'guestOrders'),
     addOrderFor(cardId: string, personId: PersonId, stop: string, text: string) {

@@ -47,8 +47,13 @@ service cloud.firestore {
         allow delete: if false;
 
         match /messages/{messageId} {
-          allow read, write: if isMember(gid)
-            && request.auth.uid in get(/databases/$(database)/documents/groups/$(gid)/chats/$(chatId)).data.memberIds;
+          function inChat() {
+            return isMember(gid)
+              && request.auth.uid in get(/databases/$(database)/documents/groups/$(gid)/chats/$(chatId)).data.memberIds;
+          }
+          allow read, create, update: if inChat();
+          // Only the person who sent a message can delete it.
+          allow delete: if inChat() && resource.data.authorId == request.auth.uid;
         }
       }
       match /photos/{photoId} {
