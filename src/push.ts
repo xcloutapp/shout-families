@@ -1,4 +1,4 @@
-import { deleteDoc, doc, setDoc } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
 /** Where the app stands on notifications for this phone. */
@@ -63,9 +63,7 @@ export async function turnOnPush(): Promise<PushState> {
   await navigator.serviceWorker.ready;
   let sub = await r.pushManager.getSubscription();
   if (!sub) {
-    const res = await fetch('/api/pushKey');
-    if (!res.ok) throw new Error('Notifications aren’t set up on the server yet');
-    const { publicKey } = (await res.json()) as { publicKey: string };
+    const publicKey = await getPublicKey();
     sub = await r.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(publicKey) });
   }
   await saveSub(sub);
@@ -94,9 +92,35 @@ export async function refreshPush() {
   }
 }
 
-export async function sendTestPush() {
-  const token = await auth.currentUser?.getIdToken();
-  const res = await fetch('/api/pushTest', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) throw new Error(await res.text());
-  return (await res.json()) as { sent: number };
+/** Asks the server to do something and waits for it to finish. */
+async function request(kind: 'key' | 'test'): Promise<{ sent: number }> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error('Sign in first');
+  const ref = await addDoc(collection(db, 'users', uid, 'pushRequests'), { kind, at: Date.now() });
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => {
+      stop();
+      reject(new Error('The notification server didn’t answer. Try again in a minute'));
+    }, 30000);
+    const stop = onSnapshot(ref, (d) => {
+      const v = d.data() as { done?: boolean; sent?: number } | undefined;
+      if (v?.done) {
+        clearTimeout(t);
+        stop();
+        resolve({ sent: v.sent ?? 0 });
+      }
+    });
+  });
 }
+
+async function getPublicKey(): Promise<string> {
+  const read = async () => ((await getDoc(doc(db, 'config', 'pushPublic'))).data() as { publicKey?: string } | undefined)?.publicKey;
+  const k = await read();
+  if (k) return k;
+  await request('key');
+  const k2 = await read();
+  if (!k2) throw new Error('Notifications aren’t set up on the server yet');
+  return k2;
+}
+
+export const sendTestPush = () => request('test');

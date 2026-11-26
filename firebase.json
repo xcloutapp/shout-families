@@ -34,22 +34,6 @@
           }
         ]
       }
-    ],
-    "rewrites": [
-      {
-        "source": "/api/pushKey",
-        "function": {
-          "functionId": "pushKey",
-          "region": "australia-southeast1"
-        }
-      },
-      {
-        "source": "/api/pushTest",
-        "function": {
-          "functionId": "pushTest",
-          "region": "australia-southeast1"
-        }
-      }
     ]
   },
   "firestore": {

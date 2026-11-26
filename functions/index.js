@@ -2,11 +2,9 @@
 // Uses standard Web Push (works on iPhone home-screen apps, Android and desktop browsers).
 // The signing keys are made on first use and kept in Firestore at config/push, which the app can't read.
 import { initializeApp } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
-import { onRequest } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import webpush from 'web-push';
 
@@ -22,6 +20,8 @@ function vapidKeys() {
     if (snap.exists && snap.data().publicKey) return snap.data();
     const k = webpush.generateVAPIDKeys();
     tx.set(ref, { publicKey: k.publicKey, privateKey: k.privateKey, at: Date.now() });
+    // The public half goes where signed-in phones can read it.
+    tx.set(db.doc('config/pushPublic'), { publicKey: k.publicKey });
     return k;
   }).catch((e) => {
     keysP = null;
@@ -107,22 +107,15 @@ export const notifyMessage = onDocumentCreated('groups/{gid}/chats/{cid}/message
   logger.info('notified', { gid, cid, to: to.length, sent });
 });
 
-// The public half of the signing key, which phones need to subscribe.
-export const pushKey = onRequest(async (_req, res) => {
-  const k = await vapidKeys();
-  res.set('Cache-Control', 'public, max-age=300').json({ publicKey: k.publicKey });
-});
-
-// "Send me a test" from the Me tab.
-export const pushTest = onRequest(async (req, res) => {
-  if (req.method !== 'POST') return void res.status(405).send('POST only');
-  const token = (req.get('Authorization') ?? '').replace(/^Bearer /, '');
-  let uid;
-  try {
-    uid = (await getAuth().verifyIdToken(token)).uid;
-  } catch {
-    return void res.status(401).send('Sign in first');
+// Requests from the app: { kind: 'key' } makes sure the signing key exists,
+// { kind: 'test' } also sends a test notification to that person's phones.
+export const pushRequest = onDocumentCreated('users/{uid}/pushRequests/{rid}', async (event) => {
+  const r = event.data?.data();
+  if (!r) return;
+  await vapidKeys();
+  let sent = 0;
+  if (r.kind === 'test') {
+    sent = await sendTo([event.params.uid], { title: 'Shout', body: 'Notifications are working 👍', url: '/#/me', tag: 'test', test: true });
   }
-  const sent = await sendTo([uid], { title: 'Shout', body: 'Notifications are working 👍', url: '/#/me', tag: 'test', test: true });
-  res.json({ sent });
+  await event.data.ref.update({ done: true, sent });
 });
