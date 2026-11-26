@@ -2,24 +2,22 @@
 
 Family runs, dinner, jobs and shouts, in one place instead of the group chat.
 
-## Version 1 (this build)
+## What's in it (chat-first, v2)
 
-- **Home:** each family member's circle, with a ring if they owe an answer, plus open cards and a balances summary.
-- **Run:** "I'm going to…" (Maccas, GYG, KFC, Coles, Woolies, IGA, Dan Murphy's, Other). People add orders from saved usuals, ask for an extra stop, or tap "Not me". The buyer locks the run, ticks items off, marks "can't get" items, then enters amounts, which become IOUs.
-- **Dinner:** who's home tonight, plus a vote. A winning takeaway turns into a run with one tap.
-- **Job:** post it, someone taps "I've got it", then "Done", and it's logged as a favour.
-- **Shout:** log a favour or money by hand.
-- **Balances:** net money per person, favours, recent shouts, settle up.
-- **Calendar:** anything with a time.
-- **Under-18 rules:** bottle shop runs are hidden from under-18s.
+- **Chats like Messages:** the family chat, a Fun chat, and smaller chats ("The boys"). New chats default to whoever's home.
+- **Type normally:** "Going to GYG" becomes a run, "Bring the washing in" a job, "Pick up Emmett" a lift, "Who's home for dinner?" a dinner check. Every card has Undo.
+- **Replies do the work:** typing while a run is open offers "Add this to Steve's GYG run?". "Can I have KFC?" asks the buyer to add a stop. Press and hold any message for I've got it / On my way / Not me.
+- **Suggestions:** phrase chips above the text box (learned from what you send), with optional Who / Where / When add-ons that stay tappable after sending.
+- **Run links for people without the app:** share a run into any chat, and guests add an order with no sign-in.
+- **Fun chat:** Instagram, TikTok and YouTube links go there automatically, with Actually good / Not for me feedback for the sender. Photos too.
+- **Status and Life360:** tap Home / Work / Out / Away (no location tracking), plus an Open Life360 button.
+- **Balances, calendar, under-18 rules** as before.
 
-Everyone signs in with Google, and the family's data syncs live through Firebase (Firestore). Invite people from the **Me** tab: the link adds them to your group.
+Message detection is rule-based (`src/intents.ts`) for now.
 
-## Firebase
+## Testing
 
-- Project: `shout-families`
-- Database rules: `firestore.rules`. Only group members can read or write a group's cards and balances. A group can be opened by anyone with its invite link.
-- Every push to `main` builds the app and publishes it to https://shout-families.web.app, along with the database rules (`.github/workflows/deploy.yml`). It signs in to Google with Workload Identity Federation (no stored keys), using the `github-deploy` service account.
+`VITE_EMU=1 npm run build` makes a build that talks to local Firebase emulators (Firestore on 8085, Auth on 9099) and exposes `window.__emuSignIn(uid, email, name)` for scripted tests.
 
 ## Run it
 

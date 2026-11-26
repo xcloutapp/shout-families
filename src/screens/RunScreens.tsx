@@ -116,11 +116,11 @@ export function AddOrder({ card: c }: { card: RunCard }) {
       <div className="grow" />
       <div className="row">
         {c.createdBy !== s.me.id && mine.length === 0 && (
-          <button className="btn big ghost" onClick={() => { s.notMe(c.id); nav('/'); }}>Not me</button>
+          <button className="btn big ghost" onClick={() => { s.notMe(c.id); nav(-1); }}>Not me</button>
         )}
         <button className="btn big primary grow" disabled={!text} onClick={add}>Add to run</button>
       </div>
-      {mine.length > 0 && <button className="btn quiet" onClick={() => nav('/')}>Done</button>}
+      {mine.length > 0 && <button className="btn quiet" onClick={() => nav(-1)}>Done</button>}
 
       {stopSheet && (
         <Sheet onClose={() => setStopSheet(false)}>
@@ -235,14 +235,17 @@ export function BuyerList({ card: c }: { card: RunCard }) {
         <Sheet onClose={() => setAmountsOpen(false)}>
           <h2 style={{ fontSize: 22 }}>What does everyone owe?</h2>
           <span className="muted">Receipt scanning is coming. For now, type each person's total.</span>
-          {people.filter((id) => id !== s.me.id).map((id) => (
+          {people.filter((id) => id.startsWith('guest:')).length > 0 && (
+            <span className="muted">{people.filter((id) => id.startsWith('guest:')).map((id) => id.slice(6)).join(', ')} ordered from a link, so settle up with them directly.</span>
+          )}
+          {people.filter((id) => id !== s.me.id && !id.startsWith('guest:')).map((id) => (
             <label key={id} className="row">
               <Avatar person={s.person(id)} size={36} />
               <span className="grow">{s.person(id).name}</span>
               <input className="input" style={{ width: 120 }} inputMode="decimal" placeholder="$0.00" value={amounts[id] ?? ''} onChange={(e) => setAmounts({ ...amounts, [id]: e.target.value })} />
             </label>
           ))}
-          {people.filter((id) => id !== s.me.id).length === 0 && <span className="muted">Only your own order on this run, so nothing to split.</span>}
+          {people.filter((id) => id !== s.me.id && !id.startsWith('guest:')).length === 0 && <span className="muted">Only your own order on this run, so nothing to split.</span>}
           <button
             className="btn big primary"
             onClick={() => {

@@ -16,7 +16,7 @@ export default function CardScreen() {
       <div className="screen">
         <TopBar />
         <b>That card's gone.</b>
-        <button className="btn ghost" onClick={() => nav('/')}>Back home</button>
+        <button className="btn ghost" onClick={() => nav('/')}>Back to chats</button>
       </div>
     );
   }
@@ -75,12 +75,12 @@ function Dinner({ card: c }: { card: DinnerCard }) {
       {takeaway && (
         <button className="btn big primary" onClick={() => {
           const home = c.forIds.filter((id) => c.home[id] !== 'no');
-          const runId = s.startRun(takeaway, home.includes(s.me.id) ? home : [s.me.id, ...home], Date.now() + 20 * 60000);
+          s.startRun(takeaway, home.includes(s.me.id) ? home : [s.me.id, ...home], Date.now() + 20 * 60000, c.chatId);
           s.doneCard(c.id, false);
-          nav(`/card/${runId}`, { replace: true });
+          nav(c.chatId ? `/chat/${c.chatId}` : '/', { replace: true });
         }}>{takeaway} is winning · make it a run</button>
       )}
-      {c.createdBy === s.me.id && <button className="btn quiet" onClick={() => { s.doneCard(c.id, false); nav('/'); }}>Close this card</button>}
+      {c.createdBy === s.me.id && <button className="btn quiet" onClick={() => { s.doneCard(c.id, false); nav(-1); }}>Close this card</button>}
     </div>
   );
 }
@@ -122,11 +122,11 @@ function Job({ card: c }: { card: JobCard }) {
       {!c.claimedBy && mineToDo && <button className="btn big primary" onClick={() => s.claim(c.id)}>I've got it</button>}
       {c.claimedBy === s.me.id && (
         <>
-          <button className="btn big green" onClick={() => { s.doneCard(c.id, true); toast.show('Done. Logged as a shout'); setTimeout(() => nav('/'), 700); }}>Done</button>
+          <button className="btn big green" onClick={() => { s.doneCard(c.id, true); toast.show('Done. Logged as a shout'); setTimeout(() => nav(-1), 700); }}>Done</button>
           <button className="btn quiet" onClick={() => s.unclaim(c.id)}>Actually, I can't</button>
         </>
       )}
-      {c.createdBy === s.me.id && <button className="btn quiet" onClick={() => { s.deleteCard(c.id); nav('/'); }}>Delete job</button>}
+      {c.createdBy === s.me.id && <button className="btn quiet" onClick={() => { s.deleteCard(c.id); nav(-1); }}>Delete job</button>}
       {toast.node}
     </div>
   );

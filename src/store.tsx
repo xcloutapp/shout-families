@@ -3,6 +3,9 @@ import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import {
   arrayUnion,
   collection,
+  getDocs,
+  where,
+  increment,
   deleteDoc,
   doc,
   getDoc,
@@ -14,9 +17,10 @@ import {
   setDoc,
   updateDoc,
   writeBatch,
+  deleteField,
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import type { Card, DinnerCard, Group, GroupType, JobCard, LedgerEntry, Person, PersonId, RunCard, UserDoc } from './types';
+import type { Card, Chat, DinnerCard, Group, GroupType, JobCard, LedgerEntry, Message, Person, PersonId, RunCard, Share, StatusLabel, Tokens, UserDoc } from './types';
 
 export const COLORS = ['#FFB38A', '#F5C6E0', '#B3A6FF', '#8FD3FF', '#6FD3A8', '#FFD27A', '#FF9AA2', '#C3E88D'];
 
@@ -31,6 +35,7 @@ interface Session {
   group: Group | null;
   cards: Card[];
   ledger: LedgerEntry[];
+  chats: Chat[];
 }
 
 const SessionCtx = createContext<Session | null>(null);
@@ -41,6 +46,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [group, setGroup] = useState<Group | null | undefined>(undefined);
   const [cards, setCards] = useState<Card[]>([]);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
+  const [chats, setChats] = useState<Chat[]>([]);
 
   useEffect(() => onAuthStateChanged(auth, (u) => setUser(u)), []);
 
@@ -55,8 +61,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setGroup(undefined);
     setCards([]);
     setLedger([]);
-    if (!gid) return;
+    setChats([]);
+    if (!gid || !user) return;
+    ensureDefaultChats(gid).catch((e) => console.error('default chats', e));
     const unsubs = [
+      onSnapshot(query(collection(db, 'groups', gid, 'chats'), where('memberIds', 'array-contains', user.uid)), (q) =>
+        setChats(q.docs.map((d) => ({ ...(d.data() as Chat), id: d.id })).sort((a, b) => b.lastAt - a.lastAt)),
+      (e) => console.error('chats', e)),
       onSnapshot(doc(db, 'groups', gid), (s) => setGroup(s.exists() ? ({ id: s.id, ...s.data() } as Group) : null), () => setGroup(null)),
       onSnapshot(query(collection(db, 'groups', gid, 'cards'), orderBy('createdAt', 'desc'), limit(150)), (q) =>
         setCards(q.docs.map((d) => ({ ...(d.data() as Card), id: d.id }))),
@@ -66,7 +77,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       ),
     ];
     return () => unsubs.forEach((u) => u());
-  }, [gid]);
+  }, [gid, user]);
 
   let phase: Phase = 'loading';
   if (user === null) phase = 'signedOut';
@@ -76,7 +87,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   else if (user && userDoc && group) phase = 'ready';
 
   return (
-    <SessionCtx.Provider value={{ phase, user: user ?? null, userDoc: userDoc ?? null, group: group ?? null, cards, ledger }}>
+    <SessionCtx.Provider value={{ phase, user: user ?? null, userDoc: userDoc ?? null, group: group ?? null, cards, ledger, chats }}>
       {children}
     </SessionCtx.Provider>
   );
@@ -102,6 +113,35 @@ export async function saveProfile(name: string, adult: boolean, color: string) {
     }
   } else {
     await setDoc(ref, { name, adult, color, groupIds: [] } satisfies UserDoc);
+  }
+}
+
+/** Every group has a family chat (everyone) and a Fun chat (reels and photos). Fixed ids so two phones can't make duplicates. */
+export async function ensureDefaultChats(gid: string) {
+  const u = auth.currentUser;
+  if (!u) return;
+  const g = (await getDoc(doc(db, 'groups', gid))).data() as Omit<Group, 'id'> | undefined;
+  if (!g) return;
+  for (const id of ['everyone', 'fun'] as const) {
+    const ref = doc(db, 'groups', gid, 'chats', id);
+    await runTransaction(db, async (t) => {
+      const s = await t.get(ref);
+      if (!s.exists()) {
+        const chat: Omit<Chat, 'id'> = {
+          kind: id === 'fun' ? 'fun' : 'home',
+          name: id === 'fun' ? 'Fun' : g.name,
+          everyone: true,
+          memberIds: g.memberIds,
+          createdAt: Date.now(),
+          createdBy: u.uid,
+          lastAt: id === 'fun' ? Date.now() - 1 : Date.now(),
+          lastText: id === 'fun' ? 'Reels, TikToks and photos go here' : 'Say hi to the family',
+        };
+        t.set(ref, chat);
+      } else if (!(s.data() as Chat).memberIds.includes(u.uid)) {
+        t.update(ref, { memberIds: arrayUnion(u.uid) });
+      }
+    }).catch((e) => console.error('ensure chat', id, e));
   }
 }
 
@@ -137,7 +177,12 @@ export async function joinGroup(groupId: string): Promise<'joined' | 'already' |
     });
     return 'joined' as const;
   });
-  if (result !== 'missing') await updateDoc(doc(db, 'users', u.uid), { groupIds: arrayUnion(groupId), activeGroupId: groupId });
+  if (result !== 'missing') {
+    await updateDoc(doc(db, 'users', u.uid), { groupIds: arrayUnion(groupId), activeGroupId: groupId });
+    // Join every "everyone" chat in the group.
+    const everyone = await getDocs(query(collection(db, 'groups', groupId, 'chats'), where('everyone', '==', true)));
+    for (const c of everyone.docs) await updateDoc(c.ref, { memberIds: arrayUnion(u.uid) }).catch(() => {});
+  }
   return result;
 }
 
@@ -154,7 +199,8 @@ export function useStore() {
   const gid = group.id;
 
   const people: Person[] = group.memberIds.map((id) => ({ id, ...(group.members[id] ?? { name: 'Someone', color: '#888', adult: true }) }));
-  const person = (id: PersonId): Person => people.find((p) => p.id === id) ?? { id, name: 'Someone', color: '#888', adult: true };
+  const person = (id: PersonId): Person =>
+    people.find((p) => p.id === id) ?? (id.startsWith('guest:') ? { id, name: id.slice(6), color: '#c9c9d1', adult: true } : { id, name: 'Someone', color: '#888', adult: true });
   const me = person(meId);
   const cardRef = (id: string) => doc(db, 'groups', gid, 'cards', id);
 
@@ -162,9 +208,18 @@ export function useStore() {
     runTransaction(db, async (t) => {
       const s = await t.get(cardRef(id));
       if (!s.exists()) return;
-      const { id: _drop, ...rest } = fn({ ...(s.data() as T), id }) as T & { id: string };
+      const next = fn({ ...(s.data() as T), id }) as T & { id: string };
+      const { id: _drop, ...rest } = next;
       void _drop;
       t.set(cardRef(id), rest);
+      // Keep a shared run link up to date for guests.
+      if (next.kind === 'run' && next.shareToken) {
+        t.update(doc(db, 'shares', next.shareToken), {
+          orders: next.orders.map((o) => ({ name: person(o.personId).name, text: o.text })),
+          shops: next.stops.filter((x) => x.approved).map((x) => x.shop),
+          open: !next.locked && next.status !== 'done',
+        });
+      }
     }).catch((e) => console.error('card update failed', e));
 
   const addLedger = (entries: Omit<LedgerEntry, 'id' | 'createdAt' | 'settled' | 'createdBy'>[]) => {
@@ -190,7 +245,101 @@ export function useStore() {
     notMe: [] as PersonId[],
   });
 
+  const msgCol = (cid: string) => collection(db, 'groups', gid, 'chats', cid, 'messages');
+
+  const sendMessage = async (cid: string, m: Omit<Message, 'id' | 'authorId' | 'createdAt'>): Promise<string> => {
+    const ref = doc(msgCol(cid));
+    const msg = { ...m, authorId: meId, createdAt: Date.now() };
+    await setDoc(ref, msg);
+    const preview = m.text ?? (m.link ? `${m.link.platform === 'web' ? 'Link' : m.link.platform === 'tiktok' ? 'TikTok' : 'Reel'}` : m.photoId ? 'Photo' : '');
+    updateDoc(doc(db, 'groups', gid, 'chats', cid), { lastAt: msg.createdAt, lastText: `${me.name}: ${preview}`.slice(0, 120) }).catch(() => {});
+    return ref.id;
+  };
+
+  /** Creates a card in a chat: the message shows the card inline. */
+  const postCard = async <T extends Card>(cid: string, text: string, card: Omit<T, 'id'>, existingMsg?: string) => {
+    const cardDoc = doc(collection(db, 'groups', gid, 'cards'));
+    await setDoc(cardDoc, { ...card, chatId: cid });
+    if (existingMsg) await updateDoc(doc(msgCol(cid), existingMsg), { cardId: cardDoc.id });
+    else await sendMessage(cid, { text, cardId: cardDoc.id });
+    return cardDoc.id;
+  };
+
+  const chatsList = sess.chats;
+  const chatById = (cid: string) => chatsList.find((c) => c.id === cid);
+
   return {
+    chats: chatsList,
+    chatById,
+    sendMessage,
+    postCard,
+    msgCol,
+    updateMessage: (cid: string, mid: string, patch: Partial<Message>) => updateDoc(doc(msgCol(cid), mid), patch),
+    clearCard: (cid: string, mid: string) => updateDoc(doc(msgCol(cid), mid), { cardId: deleteField(), dismissed: true }),
+    guestCol: (token: string) => collection(db, 'shares', token, 'guestOrders'),
+    addOrderFor(cardId: string, personId: PersonId, stop: string, text: string) {
+      return updateCard<RunCard>(cardId, (c) => ({
+        ...c,
+        notMe: c.notMe.filter((p) => p !== personId),
+        orders: [...c.orders, { id: uid(), personId, stop, text, ticked: false }],
+      }));
+    },
+    react: (cid: string, mid: string, val: 'good' | 'nah' | null) =>
+      updateDoc(doc(msgCol(cid), mid), { [`reactions.${meId}`]: val ?? deleteField() }),
+    quickReply: (cid: string, mid: string, text: string) => updateDoc(doc(msgCol(cid), mid), { [`replies.${meId}`]: text }),
+    learnPhrase: (text: string) => {
+      const k = text.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
+      if (k.length < 4) return;
+      updateDoc(doc(db, 'users', meId), { [`phrases.${k.replace(/\./g, '')}`]: increment(1) }).catch(() => {});
+    },
+    learnPlace: (place: string) => {
+      const list = userDoc.places ?? [];
+      if (!list.includes(place)) updateDoc(doc(db, 'users', meId), { places: [place, ...list].slice(0, 8) }).catch(() => {});
+    },
+    phrases: userDoc.phrases ?? {},
+    places: userDoc.places ?? [],
+    async createChat(memberIds: PersonId[], name?: string) {
+      const ref = doc(collection(db, 'groups', gid, 'chats'));
+      const ids = [...new Set([meId, ...memberIds])];
+      await setDoc(ref, { kind: 'home', name: name || undefined, everyone: false, memberIds: ids, createdAt: Date.now(), createdBy: meId, lastAt: Date.now() } satisfies Omit<Chat, 'id'>);
+      return ref.id;
+    },
+    status: (id: PersonId): StatusLabel | undefined => {
+      const st = group.status?.[id];
+      if (!st) return undefined;
+      // Statuses go stale after 16 hours.
+      return Date.now() - st.at < 16 * 3600000 ? st.label : undefined;
+    },
+    setStatus: (label: StatusLabel) => updateDoc(doc(db, 'groups', gid), { [`status.${meId}`]: { label, at: Date.now() } }),
+    async shareRun(cardId: string): Promise<string> {
+      const card = sess.cards.find((c) => c.id === cardId) as RunCard | undefined;
+      if (!card) throw new Error('no card');
+      let token = card.shareToken;
+      if (!token) {
+        token = doc(collection(db, 'shares')).id + Math.random().toString(36).slice(2, 8);
+        const share: Share = {
+          gid,
+          cardId,
+          chatId: card.chatId ?? 'everyone',
+          buyerName: person(card.createdBy).name,
+          shops: card.stops.filter((s) => s.approved).map((s) => s.shop),
+          names: people.map((p) => p.name),
+          orders: card.orders.map((o) => ({ name: person(o.personId).name, text: o.text })),
+          closesAt: card.due,
+          open: !card.locked,
+        };
+        await setDoc(doc(db, 'shares', token), share);
+        await updateDoc(cardRef(cardId), { shareToken: token });
+      }
+      return `${location.origin}${location.pathname}#/r/${token}`;
+    },
+    async uploadPhoto(cid: string, file: File) {
+      const data = await compressImage(file);
+      const ref = doc(collection(db, 'groups', gid, 'photos'));
+      await setDoc(ref, { data, by: meId, at: Date.now() });
+      await sendMessage(cid, { photoId: ref.id });
+    },
+
     state: { usuals: { [meId]: userDoc.usuals ?? {} } as Record<PersonId, Record<string, string[]>> },
     group,
     members: people,
@@ -202,8 +351,17 @@ export function useStore() {
 
     setAdult: (id: PersonId, adult: boolean) => updateDoc(doc(db, 'groups', gid), { [`members.${id}.adult`]: adult }),
 
-    startRun(shop: string, forIds: PersonId[], due: number): string {
-      return newCard<RunCard>({ ...base(forIds, due), kind: 'run', stops: [{ shop, addedBy: meId, approved: true }], orders: [], locked: false });
+    startRun(shop: string, forIds: PersonId[], due: number, chatId?: string, msgId?: string): string {
+      const card: Omit<RunCard, 'id'> = { ...base(forIds, due), kind: 'run', stops: [{ shop, addedBy: meId, approved: true }], orders: [], locked: false };
+      if (chatId) {
+        const ref = doc(collection(db, 'groups', gid, 'cards'));
+        setDoc(ref, { ...card, chatId }).then(async () => {
+          if (msgId) await updateDoc(doc(msgCol(chatId), msgId), { cardId: ref.id });
+          else await sendMessage(chatId, { text: `Going to ${shop}`, cardId: ref.id });
+        });
+        return ref.id;
+      }
+      return newCard<RunCard>(card);
     },
     addOrder(cardId: string, stop: string, text: string, note?: string) {
       updateCard<RunCard>(cardId, (c) => ({
@@ -253,8 +411,17 @@ export function useStore() {
       updateCard(cardId, (c) => ({ ...c, status: 'done' }));
     },
 
-    startDinner(forIds: PersonId[], options: string[]): string {
-      return newCard<DinnerCard>({ ...base(forIds), kind: 'dinner', home: {}, options: options.filter(Boolean).map((label) => ({ label, votes: [] })) });
+    startDinner(forIds: PersonId[], options: string[], chatId?: string, msgId?: string): string {
+      const card: Omit<DinnerCard, 'id'> = { ...base(forIds), kind: 'dinner', home: {}, options: options.filter(Boolean).map((label) => ({ label, votes: [] })) };
+      if (chatId) {
+        const ref = doc(collection(db, 'groups', gid, 'cards'));
+        setDoc(ref, { ...card, chatId }).then(async () => {
+          if (msgId) await updateDoc(doc(msgCol(chatId), msgId), { cardId: ref.id });
+          else await sendMessage(chatId, { text: "Who's home for dinner?", cardId: ref.id });
+        });
+        return ref.id;
+      }
+      return newCard<DinnerCard>(card);
     },
     answerHome(cardId: string, ans: 'yes' | 'no') {
       updateCard<DinnerCard>(cardId, (c) => ({ ...c, home: { ...c.home, [meId]: ans } }));
@@ -274,9 +441,27 @@ export function useStore() {
       );
     },
 
-    startJob(title: string, forIds: PersonId[], due?: number): string {
-      return newCard<JobCard>({ ...base(forIds, due), kind: 'job', title });
+    startJob(title: string, forIds: PersonId[], due?: number, extra?: { chatId?: string; msgId?: string; lift?: boolean; tokens?: Tokens; claim?: boolean; assignee?: PersonId }): string {
+      const card: Omit<JobCard, 'id'> = {
+        ...base(extra?.assignee ? [extra.assignee] : forIds, due),
+        kind: 'job',
+        title,
+        lift: extra?.lift,
+        tokens: extra?.tokens,
+        ...(extra?.claim ? { status: 'claimed' as const, claimedBy: meId } : {}),
+      };
+      if (extra?.chatId) {
+        const ref = doc(collection(db, 'groups', gid, 'cards'));
+        const cid = extra.chatId;
+        setDoc(ref, { ...card, chatId: cid }).then(async () => {
+          if (extra.msgId) await updateDoc(doc(msgCol(cid), extra.msgId), { cardId: ref.id });
+          else await sendMessage(cid, { text: title, cardId: ref.id });
+        });
+        return ref.id;
+      }
+      return newCard<JobCard>(card);
     },
+    updateCardFields: (id: string, patch: Partial<Card>) => updateDoc(cardRef(id), patch as Record<string, unknown>),
     claim(cardId: string) {
       updateCard(cardId, (c) => (c.claimedBy ? c : { ...c, status: 'claimed', claimedBy: meId }));
     },
@@ -341,3 +526,30 @@ export function timeLeft(due?: number): string {
 }
 
 export const clock = (t: number) => new Date(t).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' });
+
+/** Shrink a photo to about 900px so it fits in a database document (no separate file storage needed). */
+async function compressImage(file: File): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = rej;
+      i.src = url;
+    });
+    const scale = Math.min(1, 900 / Math.max(img.width, img.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.width * scale);
+    c.height = Math.round(img.height * scale);
+    c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
+    let q = 0.75;
+    let out = c.toDataURL('image/jpeg', q);
+    while (out.length > 700_000 && q > 0.3) {
+      q -= 0.15;
+      out = c.toDataURL('image/jpeg', q);
+    }
+    return out;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}

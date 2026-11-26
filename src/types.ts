@@ -16,6 +16,7 @@ export interface Group {
   ownerId: PersonId;
   memberIds: PersonId[];
   members: Record<PersonId, Omit<Person, 'id'>>;
+  status?: Record<PersonId, { label: 'home' | 'work' | 'out' | 'away'; at: number }>;
   createdAt: number;
 }
 
@@ -26,10 +27,14 @@ export interface UserDoc {
   groupIds: string[];
   activeGroupId?: string;
   usuals?: Record<string, string[]>;
+  phrases?: Record<string, number>;
+  places?: string[];
 }
 
 interface CardBase {
   id: string;
+  chatId?: string;
+  shareToken?: string;
   createdBy: PersonId;
   createdAt: number;
   forIds: PersonId[];
@@ -65,6 +70,8 @@ export interface DinnerCard extends CardBase {
 export interface JobCard extends CardBase {
   kind: 'job';
   title: string;
+  lift?: boolean;
+  tokens?: { who?: string; where?: string; when?: string };
 }
 
 export type Card = RunCard | DinnerCard | JobCard;
@@ -79,4 +86,56 @@ export interface LedgerEntry {
   createdAt: number;
   createdBy: PersonId;
   settled: boolean;
+}
+
+export type StatusLabel = 'home' | 'work' | 'out' | 'away';
+
+export interface MemberStatus {
+  label: StatusLabel;
+  at: number;
+}
+
+export interface Chat {
+  id: string;
+  name?: string;
+  kind: 'home' | 'fun';
+  everyone: boolean;
+  memberIds: PersonId[];
+  createdAt: number;
+  createdBy: PersonId;
+  lastAt: number;
+  lastText?: string;
+}
+
+export interface Tokens {
+  who?: string;
+  where?: string;
+  when?: string;
+}
+
+export interface Message {
+  id: string;
+  authorId: PersonId;
+  createdAt: number;
+  text?: string;
+  tokens?: Tokens;
+  cardId?: string;
+  link?: { url: string; platform: 'instagram' | 'tiktok' | 'youtube' | 'web' };
+  photoId?: string;
+  reactions?: Record<PersonId, 'good' | 'nah'>;
+  replies?: Record<PersonId, string>;
+  note?: string;
+  dismissed?: boolean;
+}
+
+export interface Share {
+  gid: string;
+  cardId: string;
+  chatId: string;
+  buyerName: string;
+  shops: string[];
+  names: string[];
+  orders: { name: string; text: string }[];
+  closesAt?: number;
+  open: boolean;
 }

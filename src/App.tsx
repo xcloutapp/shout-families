@@ -1,9 +1,11 @@
 import { useEffect } from 'react';
 import { HashRouter, Route, Routes } from 'react-router-dom';
 import { SessionProvider, joinGroup, useSession } from './store';
-import Home from './screens/Home';
 import CardScreen from './screens/CardScreen';
-import { LogShout, NewSheet, StartDinner, StartJob, StartRun } from './screens/Create';
+import { LogShout } from './screens/Create';
+import { ChatList, NewChat } from './screens/Chats';
+import Thread from './screens/Thread';
+import GuestRun from './screens/Guest';
 import { Balances, Calendar, Me } from './screens/Tabs';
 import { GroupSetup, Loading, Profile, SignIn, rememberJoin } from './screens/Setup';
 
@@ -37,17 +39,15 @@ function Gate() {
   if (phase === 'group') return <GroupSetup />;
   return (
     <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/new" element={<><Home /><NewSheet /></>} />
-      <Route path="/new/run" element={<StartRun />} />
-      <Route path="/new/dinner" element={<StartDinner />} />
-      <Route path="/new/job" element={<StartJob />} />
+      <Route path="/" element={<ChatList />} />
+      <Route path="/chat/:cid" element={<Thread />} />
+      <Route path="/new-chat" element={<NewChat />} />
       <Route path="/new/shout" element={<LogShout />} />
       <Route path="/card/:id" element={<CardScreen />} />
       <Route path="/balances" element={<Balances />} />
       <Route path="/calendar" element={<Calendar />} />
       <Route path="/me" element={<Me />} />
-      <Route path="*" element={<Home />} />
+      <Route path="*" element={<ChatList />} />
     </Routes>
   );
 }
@@ -57,7 +57,10 @@ export default function App() {
     <SessionProvider>
       <HashRouter>
         <div className="app">
-          <Gate />
+          <Routes>
+            <Route path="/r/:token" element={<GuestRun />} />
+            <Route path="*" element={<Gate />} />
+          </Routes>
         </div>
       </HashRouter>
     </SessionProvider>

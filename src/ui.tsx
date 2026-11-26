@@ -49,6 +49,35 @@ const paths: Record<string, ReactNode> = {
       <path d="M12 12l3-3" />
     </>
   ),
+  pencil: (
+    <>
+      <path d="M4 20h4L19 9l-4-4L4 16z" />
+      <path d="M13 7l4 4" />
+    </>
+  ),
+  spark: <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M18 6l-2.5 2.5M8.5 15.5L6 18" />,
+  camera: (
+    <>
+      <path d="M4 8h3l2-3h6l2 3h3v11H4z" />
+      <circle cx="12" cy="13" r="3.5" />
+    </>
+  ),
+  send: <path d="M12 19V5M5 12l7-7 7 7" />,
+  share: (
+    <>
+      <path d="M12 3v12M7 8l5-5 5 5" />
+      <path d="M5 13v6h14v-6" />
+    </>
+  ),
+  chats: <path d="M4 5h16v11H9l-5 4z" />,
+  people: (
+    <>
+      <circle cx="9" cy="8" r="3.5" />
+      <path d="M2.5 20c.8-3.5 3.5-5.5 6.5-5.5s5.7 2 6.5 5.5" />
+      <path d="M16 4.5a3.5 3.5 0 010 7M18 14.5c2 .7 3.2 2.6 3.5 5.5" />
+    </>
+  ),
+  thumb: <path d="M7 11v9H4v-9zM7 11l4-7a2 2 0 013 2l-1 4h6a2 2 0 012 2.3l-1.3 6A2 2 0 0117.7 20H7" />,
   pin: (
     <>
       <path d="M12 21s-7-6-7-11a7 7 0 0114 0c0 5-7 11-7 11z" />
@@ -102,11 +131,8 @@ export function TabBar() {
   return (
     <div className="tabbar">
       <nav>
-        {tab('/', 'home', 'Home')}
+        {tab('/', 'chats', 'Chats')}
         {tab('/calendar', 'calendar', 'Calendar')}
-        <button className="tab plus" aria-label="New card" onClick={() => nav('/new')}>
-          <Icon name="plus" size={26} stroke={3} />
-        </button>
         {tab('/balances', 'balances', 'Balances')}
         {tab('/me', 'me', 'Me')}
       </nav>
