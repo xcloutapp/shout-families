@@ -19,7 +19,7 @@ Everyone signs in with Google, and the family's data syncs live through Firebase
 
 - Project: `shout-families`
 - Database rules: `firestore.rules`. Only group members can read or write a group's cards and balances. A group can be opened by anyone with its invite link.
-- Every push to `main` builds the app and publishes it to https://shout-families.web.app, along with the database rules (`.github/workflows/deploy.yml`). This needs a GitHub secret called `FIREBASE_SERVICE_ACCOUNT`.
+- Every push to `main` builds the app and publishes it to https://shout-families.web.app, along with the database rules (`.github/workflows/deploy.yml`). It signs in to Google with Workload Identity Federation (no stored keys), using the `github-deploy` service account.
 
 ## Run it
 

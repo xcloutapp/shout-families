@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  id-token: write # lets GitHub prove who it is to Google, no stored key needed
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -16,11 +20,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - name: Write service account key
-        env:
-          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/8675342569/locations/global/workloadIdentityPools/github/providers/github-provider
+          service_account: github-deploy@shout-families.iam.gserviceaccount.com
       - name: Deploy hosting and database rules
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
         run: npx --yes firebase-tools@latest deploy --only hosting,firestore:rules --project shout-families --non-interactive
