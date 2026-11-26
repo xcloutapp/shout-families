@@ -1,0 +1,9 @@
+{
+  "name": "Shout Family",
+  "short_name": "Shout",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0E0E11",
+  "theme_color": "#0E0E11",
+  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
