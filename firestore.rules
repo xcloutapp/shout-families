@@ -1,0 +1,44 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isMember(gid) {
+      return signedIn() && request.auth.uid in get(/databases/$(database)/documents/groups/$(gid)).data.memberIds;
+    }
+
+    // Each person's own profile and saved usuals.
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    match /groups/{gid} {
+      // Group ids are random and only shared through invite links,
+      // so a signed-in person can open one they've been given.
+      allow get: if signedIn();
+      allow list: if false;
+
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.memberIds == [request.auth.uid];
+
+      // Members can update the group (names, under-18 settings).
+      // Anyone else may only add themselves (joining via invite).
+      allow update: if signedIn() && (
+        request.auth.uid in resource.data.memberIds
+        || (
+          request.resource.data.memberIds == resource.data.memberIds.concat([request.auth.uid])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds', 'members'])
+        )
+      );
+      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+
+      match /cards/{cardId} {
+        allow read, write: if isMember(gid);
+      }
+      match /ledger/{entryId} {
+        allow read, write: if isMember(gid);
+      }
+    }
+  }
+}

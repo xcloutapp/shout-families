@@ -15,11 +15,21 @@ export interface Group {
   type: GroupType;
   ownerId: PersonId;
   memberIds: PersonId[];
+  members: Record<PersonId, Omit<Person, 'id'>>;
+  createdAt: number;
+}
+
+export interface UserDoc {
+  name: string;
+  color: string;
+  adult: boolean;
+  groupIds: string[];
+  activeGroupId?: string;
+  usuals?: Record<string, string[]>;
 }
 
 interface CardBase {
   id: string;
-  groupId: string;
   createdBy: PersonId;
   createdAt: number;
   forIds: PersonId[];
@@ -61,22 +71,12 @@ export type Card = RunCard | DinnerCard | JobCard;
 
 export interface LedgerEntry {
   id: string;
-  groupId: string;
   owerId: PersonId;
   owedId: PersonId;
   amount?: number;
   favour?: string;
   what: string;
   createdAt: number;
+  createdBy: PersonId;
   settled: boolean;
-}
-
-export interface AppState {
-  meId: PersonId;
-  people: Person[];
-  groups: Group[];
-  activeGroupId: string;
-  cards: Card[];
-  ledger: LedgerEntry[];
-  usuals: Record<PersonId, Record<string, string[]>>;
 }

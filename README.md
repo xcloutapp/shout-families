@@ -13,7 +13,13 @@ Family runs, dinner, jobs and shouts, in one place instead of the group chat.
 - **Calendar:** anything with a time.
 - **Under-18 rules:** bottle shop runs are hidden from under-18s.
 
-Data is saved on the device for now. On the **Me** tab you can switch person to test the app from each family member's side. Shared accounts and live sync come next.
+Everyone signs in with Google, and the family's data syncs live through Firebase (Firestore). Invite people from the **Me** tab: the link adds them to your group.
+
+## Firebase
+
+- Project: `shout-families`
+- Database rules: `firestore.rules`. Only group members can read or write a group's cards and balances. A group can be opened by anyone with its invite link.
+- Every push to `main` builds the app and publishes it to https://shout-families.web.app, along with the database rules (`.github/workflows/deploy.yml`). This needs a GitHub secret called `FIREBASE_SERVICE_ACCOUNT`.
 
 ## Run it
 

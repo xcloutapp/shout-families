@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { clock, money, moneyBalances, useStore } from '../store';
+import { clock, logOut, money, moneyBalances, switchGroup, useSession, useStore } from '../store';
+import { Profile } from './Setup';
 import { Avatar, Sheet, TabBar, useToast } from '../ui';
 
 export function Balances() {
@@ -163,29 +164,74 @@ export function Calendar() {
 
 export function Me() {
   const s = useStore();
+  const { userDoc } = useSession();
   const toast = useToast();
+  const [editing, setEditing] = useState(false);
+  const link = `${location.origin}${location.pathname}#/join/${s.group.id}`;
+  if (editing) return <Profile editing onDone={() => setEditing(false)} />;
+
+  const share = async () => {
+    const text = `Join ${s.group.name} on Shout`;
+    try {
+      if (navigator.share) await navigator.share({ title: 'Shout', text, url: link });
+      else {
+        await navigator.clipboard.writeText(link);
+        toast.show('Invite link copied');
+      }
+    } catch {
+      /* cancelled */
+    }
+  };
+
   return (
     <>
       <div className="screen with-tabs">
-        <h1 style={{ fontSize: 26 }}>Me</h1>
-        <div className="card">
-          <div className="label">Testing: be someone else</div>
-          <span className="muted">Until accounts are switched on, everyone shares this phone's data. Switch person to try the app from their side.</span>
-          <div className="row" style={{ flexWrap: 'wrap', gap: 14 }}>
-            {s.members.map((p) => (
-              <button key={p.id} onClick={() => { s.switchPerson(p.id); toast.show(`You're now ${p.name}`); }} style={{ background: 'none', border: 'none', padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                <Avatar person={p} ring={p.id === s.me.id ? 'var(--accent)' : undefined} />
-                <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{p.name}{p.adult ? '' : ' (U18)'}</span>
-              </button>
-            ))}
+        <div className="between">
+          <h1 style={{ fontSize: 26 }}>Me</h1>
+          <button className="btn quiet" onClick={() => setEditing(true)}>Edit profile</button>
+        </div>
+        <div className="row">
+          <Avatar person={s.me} size={64} ring="var(--accent)" />
+          <div className="col" style={{ gap: 2 }}>
+            <b style={{ fontSize: 18 }}>{s.me.name}</b>
+            <span className="muted">{s.me.adult ? 'Adult' : 'Under 18'}</span>
           </div>
         </div>
+
         <div className="card">
-          <div className="label">Group</div>
-          <b>{s.group.name}</b>
-          <span className="muted">Family · owner {s.person(s.group.ownerId).name} · {s.members.length} members</span>
+          <div className="between">
+            <div className="col" style={{ gap: 2 }}>
+              <b>{s.group.name}</b>
+              <span className="muted">{s.members.length} member{s.members.length === 1 ? '' : 's'} · owner {s.person(s.group.ownerId).name}</span>
+            </div>
+          </div>
+          <button className="btn primary" onClick={share}>Invite people</button>
+          {s.members.map((p) => (
+            <div key={p.id} className="between" style={{ borderTop: '1px solid var(--chip)', paddingTop: 10 }}>
+              <div className="row">
+                <Avatar person={p} size={36} />
+                <span>{p.name}{p.id === s.me.id ? ' (you)' : ''}</span>
+              </div>
+              {s.isOwner && p.id !== s.me.id ? (
+                <button className={`pill ${p.adult ? '' : 'on'}`} onClick={() => s.setAdult(p.id, !p.adult)}>{p.adult ? 'Adult' : 'Under 18'}</button>
+              ) : (
+                <span className="muted">{p.adult ? 'Adult' : 'Under 18'}</span>
+              )}
+            </div>
+          ))}
+          {s.isOwner && <span className="muted">As the owner, you can change who counts as under 18.</span>}
         </div>
-        <button className="btn ghost" onClick={() => { s.reset(); toast.show('Demo reset'); }}>Reset demo data</button>
+
+        {(userDoc?.groupIds.length ?? 0) > 1 && (
+          <div className="card">
+            <div className="label">Your groups</div>
+            {userDoc!.groupIds.map((g) => (
+              <button key={g} className={`pill ${g === s.group.id ? 'on' : ''}`} onClick={() => switchGroup(g)}>{g === s.group.id ? s.group.name : 'Switch to another group'}</button>
+            ))}
+          </div>
+        )}
+
+        <button className="btn ghost" onClick={logOut}>Sign out</button>
       </div>
       {toast.node}
       <TabBar />
