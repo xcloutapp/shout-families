@@ -25,3 +25,10 @@ jobs:
       - name: Recent notification server activity
         continue-on-error: true
         run: gcloud logging read 'resource.labels.service_name=("notifymessage" OR "pushrequest") AND (jsonPayload.message:* OR severity>=WARNING)' --project shout-families --freshness=6h --limit 40 --format='value(timestamp,severity,jsonPayload.message,jsonPayload.to,jsonPayload.sent,jsonPayload.status,textPayload)'
+      - name: Server setup
+        continue-on-error: true
+        run: |
+          gcloud eventarc triggers list --location=australia-southeast1 --format='table(name,destination.cloudRun.service,eventFilters,serviceAccount)' || true
+          gcloud run services list --region australia-southeast1 --format='table(metadata.name,status.conditions[0].status)' || true
+          gcloud firestore databases describe --database='(default)' --format='value(locationId,type)' || true
+          gcloud logging read 'resource.type="cloud_run_revision" OR resource.type="eventarc.googleapis.com/Trigger"' --project shout-families --freshness=6h --limit 15 --format='value(timestamp,severity,resource.labels.service_name,textPayload,jsonPayload.message)' || true
