@@ -1,0 +1,27 @@
+name: Check notifications
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --prefix functions
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/8675342569/locations/global/workloadIdentityPools/github/providers/github-provider
+          service_account: github-deploy@shout-families.iam.gserviceaccount.com
+      - name: Database check (counts only)
+        run: node scripts/diagnose.mjs
+      - name: Recent notification server activity
+        continue-on-error: true
+        run: gcloud logging read 'resource.labels.service_name=("notifymessage" OR "pushrequest") AND (jsonPayload.message:* OR severity>=WARNING)' --project shout-families --freshness=6h --limit 40 --format='value(timestamp,severity,jsonPayload.message,jsonPayload.to,jsonPayload.sent,jsonPayload.status,textPayload)'
