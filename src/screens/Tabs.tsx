@@ -5,7 +5,7 @@ import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { GroupType } from '../types';
 import { Profile } from './Setup';
-import { Avatar, Sheet, TabBar, useToast } from '../ui';
+import { Avatar, Sheet, useToast } from '../ui';
 
 export function Balances() {
   const s = useStore();
@@ -96,7 +96,6 @@ export function Balances() {
         </Sheet>
       )}
       {toast.node}
-      <TabBar />
     </>
   );
 }
@@ -160,7 +159,6 @@ export function Calendar() {
           );
         })}
       </div>
-      <TabBar />
     </>
   );
 }
@@ -354,7 +352,6 @@ export function Me() {
         </Sheet>
       )}
       {toast.node}
-      <TabBar />
     </>
   );
 }

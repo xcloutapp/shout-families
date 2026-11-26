@@ -108,7 +108,7 @@ export default function Thread() {
   const liked = myLinks.filter((m) => Object.values(m.reactions ?? {}).includes('good')).length;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - var(--tabbar-h))' }}>
       <div style={{ padding: '10px 12px', borderBottom: '1px solid #1f1f26', display: 'flex', alignItems: 'center', gap: 10 }}>
         <button className="icon-btn" aria-label="Back to chats" onClick={() => nav('/')}><Icon name="back" size={18} stroke={2.5} /></button>
         <div className="col grow" style={{ gap: 0, minWidth: 0 }}>
@@ -609,7 +609,7 @@ function Composer({ chat, toast }: { chat: Chat; toast: (s: string) => void }) {
   const showChips = !text && !picked && suggestions.length > 0;
 
   return (
-    <div style={{ borderTop: '1px solid #1f1f26', background: '#0e0e11', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+    <div style={{ borderTop: '1px solid #1f1f26', background: '#0e0e11' }}>
       {orderOffer && (
         <OfferBar icon="bag" text={<>Add this to <b>{s.person(openRun.createdBy).name}'s {openRun.stops[0].shop} run</b>?</>} yes="Add as my order" onYes={() => send({ asOrder: true })} onNo={() => send()} />
       )}

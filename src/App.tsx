@@ -8,6 +8,7 @@ import Thread from './screens/Thread';
 import GuestRun from './screens/Guest';
 import { Balances, Calendar, Me } from './screens/Tabs';
 import { GroupSetup, Loading, Profile, SignIn, rememberJoin } from './screens/Setup';
+import { TabBar } from './ui';
 
 // Shared into Shout from another app's share sheet (Android): ?url=…&text=…
 {
@@ -52,6 +53,7 @@ function Gate() {
   if (phase === 'profile') return <Profile />;
   if (phase === 'group') return <GroupSetup />;
   return (
+    <>
     <Routes>
       <Route path="/" element={<ChatList />} />
       <Route path="/chat/:cid" element={<Thread />} />
@@ -63,6 +65,8 @@ function Gate() {
       <Route path="/me" element={<Me />} />
       <Route path="*" element={<ChatList />} />
     </Routes>
+    <TabBar />
+    </>
   );
 }
 

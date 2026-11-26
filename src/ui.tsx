@@ -123,9 +123,10 @@ export function TopBar({ title, tag, tagColor = 'var(--accent)' }: { title?: str
 export function TabBar() {
   const nav = useNavigate();
   const { pathname } = useLocation();
+  const isOn = (path: string) => (path === '/' ? pathname === '/' || pathname.startsWith('/chat') || pathname.startsWith('/card') || pathname === '/new-chat' : pathname.startsWith(path));
   const tab = (path: string, icon: string, label: string) => (
-    <button className={`tab ${pathname === path ? 'on' : ''}`} aria-label={label} onClick={() => nav(path)}>
-      <Icon name={icon} size={24} stroke={pathname === path ? 2.4 : 2} />
+    <button className={`tab ${isOn(path) ? 'on' : ''}`} aria-label={label} aria-current={isOn(path) ? 'page' : undefined} onClick={() => nav(path)}>
+      <Icon name={icon} size={24} stroke={isOn(path) ? 2.4 : 2} />
     </button>
   );
   return (

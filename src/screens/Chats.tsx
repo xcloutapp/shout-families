@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clock, useStore } from '../store';
 import type { Person, StatusLabel } from '../types';
-import { Avatar, Icon, Sheet, TabBar, useToast } from '../ui';
+import { Avatar, Icon, Sheet, useToast } from '../ui';
 
 export const STATUS: Record<StatusLabel, { label: string; color: string }> = {
   home: { label: 'Home', color: 'var(--green)' },
@@ -117,7 +117,6 @@ export function ChatList() {
         </div>
       </div>
       {people && <PeopleSheet onClose={() => setPeople(false)} />}
-      <TabBar />
     </>
   );
 }
