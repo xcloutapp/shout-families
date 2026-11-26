@@ -8,7 +8,7 @@
     ],
     "headers": [
       {
-        "source": "**/*.@(js|css|svg)",
+        "source": "/assets/**",
         "headers": [
           {
             "key": "Cache-Control",
@@ -17,20 +17,29 @@
         ]
       },
       {
-        "source": "index.html",
+        "source": "/",
         "headers": [
           {
             "key": "Cache-Control",
-            "value": "no-cache"
+            "value": "no-cache, no-store, must-revalidate"
           }
         ]
       },
       {
-        "source": "sw.js",
+        "source": "**/*.@(html|webmanifest)",
         "headers": [
           {
             "key": "Cache-Control",
-            "value": "no-cache"
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/sw.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
           }
         ]
       }

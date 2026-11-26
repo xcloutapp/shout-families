@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { registerSW, refreshPush } from './push';
+import { watchForUpdates } from './update';
 import { HashRouter, Route, Routes } from 'react-router-dom';
 import { SessionProvider, joinGroup, switchGroup, useSession } from './store';
 import CardScreen from './screens/CardScreen';
@@ -34,6 +35,7 @@ if (m) {
 }
 
 registerSW();
+watchForUpdates();
 
 function Gate() {
   const { phase, userDoc } = useSession();
