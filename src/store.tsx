@@ -20,7 +20,7 @@ import {
   deleteField,
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import type { Card, Chat, DinnerCard, Group, GroupType, JobCard, LedgerEntry, Message, Person, PersonId, RunCard, Share, StatusLabel, Tokens, UserDoc } from './types';
+import type { CalEvent, Card, Chat, DinnerCard, Group, GroupType, JobCard, LedgerEntry, Message, Person, PersonId, RunCard, Share, StatusLabel, Tokens, UserDoc } from './types';
 
 export const COLORS = ['#FFB38A', '#F5C6E0', '#B3A6FF', '#8FD3FF', '#6FD3A8', '#FFD27A', '#FF9AA2', '#C3E88D'];
 
@@ -36,6 +36,7 @@ interface Session {
   cards: Card[];
   ledger: LedgerEntry[];
   chats: Chat[];
+  events: CalEvent[];
 }
 
 const SessionCtx = createContext<Session | null>(null);
@@ -47,6 +48,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [cards, setCards] = useState<Card[]>([]);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
+  const [events, setEvents] = useState<CalEvent[]>([]);
 
   useEffect(() => onAuthStateChanged(auth, (u) => setUser(u)), []);
 
@@ -62,6 +64,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setCards([]);
     setLedger([]);
     setChats([]);
+    setEvents([]);
     if (!gid || !user) return;
     ensureDefaultChats(gid).catch((e) => console.error('default chats', e));
     const unsubs = [
@@ -72,6 +75,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       onSnapshot(query(collection(db, 'groups', gid, 'cards'), orderBy('createdAt', 'desc'), limit(150)), (q) =>
         setCards(q.docs.map((d) => ({ ...(d.data() as Card), id: d.id }))),
       ),
+      onSnapshot(query(collection(db, 'groups', gid, 'events'), orderBy('createdAt', 'desc'), limit(300)), (q) =>
+        setEvents(q.docs.map((d) => ({ ...(d.data() as CalEvent), id: d.id }))),
+      () => {}),
       onSnapshot(query(collection(db, 'groups', gid, 'ledger'), orderBy('createdAt', 'desc'), limit(300)), (q) =>
         setLedger(q.docs.map((d) => ({ ...(d.data() as LedgerEntry), id: d.id }))),
       ),
@@ -87,7 +93,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   else if (user && userDoc && group) phase = 'ready';
 
   return (
-    <SessionCtx.Provider value={{ phase, user: user ?? null, userDoc: userDoc ?? null, group: group ?? null, cards, ledger, chats }}>
+    <SessionCtx.Provider value={{ phase, user: user ?? null, userDoc: userDoc ?? null, group: group ?? null, cards, ledger, chats, events }}>
       {children}
     </SessionCtx.Provider>
   );
@@ -314,6 +320,13 @@ export function useStore() {
     },
     phrases: userDoc.phrases ?? {},
     places: userDoc.places ?? [],
+    events: sess.events,
+    async addEvent(e: Omit<CalEvent, 'id' | 'createdBy' | 'createdAt'>): Promise<string> {
+      const ref = doc(collection(db, 'groups', gid, 'events'));
+      await setDoc(ref, { ...e, createdBy: meId, createdAt: Date.now() });
+      return ref.id;
+    },
+    deleteEvent: (id: string) => deleteDoc(doc(db, 'groups', gid, 'events', id)),
     async createInvite(name: string): Promise<string> {
       const ref = doc(collection(db, 'groups', gid, 'invites'));
       await setDoc(ref, { name: name.trim(), createdBy: meId, createdAt: Date.now(), status: 'pending' });

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { clock, createGroup, joinGroup, logOut, money, moneyBalances, switchGroup, useSession, useStore } from '../store';
+import { createGroup, joinGroup, logOut, money, moneyBalances, switchGroup, useSession, useStore } from '../store';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { GroupType } from '../types';
@@ -100,68 +100,6 @@ export function Balances() {
   );
 }
 
-export function Calendar() {
-  const s = useStore();
-  const nav = useNavigate();
-  const [justMe, setJustMe] = useState(false);
-  const items = s.cards
-    .filter((c) => c.due && c.status !== 'done')
-    .filter((c) => !justMe || c.forIds.includes(s.me.id) || c.createdBy === s.me.id)
-    .sort((a, b) => a.due! - b.due!);
-  const today = new Date();
-  const start = new Date(today);
-  start.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-  const days = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    return d;
-  });
-  const has = (d: Date) => items.some((c) => new Date(c.due!).toDateString() === d.toDateString());
-  const label = (kind: string) => ({ run: ['Run', 'var(--accent)'], dinner: ['Dinner', 'var(--green)'], job: ['Job', 'var(--purple)'] } as Record<string, string[]>)[kind];
-
-  return (
-    <>
-      <div className="screen with-tabs">
-        <div className="between">
-          <h1 style={{ fontSize: 26 }}>{today.toLocaleDateString('en-AU', { month: 'long' })}</h1>
-          <button className="pill" disabled title="Coming soon">Add to my calendar</button>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 4 }}>
-          {days.map((d) => {
-            const isToday = d.toDateString() === today.toDateString();
-            return (
-              <div key={d.toISOString()} className="col" style={{ alignItems: 'center', gap: 4, minHeight: 64, justifyContent: 'center', borderRadius: 16, background: isToday ? 'var(--accent)' : 'var(--surface-2)', color: isToday ? 'var(--accent-ink)' : 'var(--text)' }}>
-                <span style={{ fontSize: 11, fontWeight: 600 }}>{d.toLocaleDateString('en-AU', { weekday: 'narrow' })}</span>
-                <b style={{ fontSize: 18 }}>{d.getDate()}</b>
-                <span style={{ width: 5, height: 5, borderRadius: 3, background: has(d) ? (isToday ? 'var(--accent-ink)' : 'var(--accent)') : 'transparent' }} />
-              </div>
-            );
-          })}
-        </div>
-        <div className="row">
-          <button className={`pill ${!justMe ? 'on' : ''}`} onClick={() => setJustMe(false)}>Everyone</button>
-          <button className={`pill ${justMe ? 'on' : ''}`} onClick={() => setJustMe(true)}>Just me</button>
-        </div>
-        <div className="label">Coming up</div>
-        {items.length === 0 && <span className="muted">Nothing with a time yet. Runs and jobs with a deadline show up here.</span>}
-        {items.map((c) => {
-          const [l, color] = label(c.kind);
-          const title = c.kind === 'run' ? `${c.stops.filter((x) => x.approved).map((x) => x.shop).join(' + ')} run · orders close` : c.kind === 'job' ? c.title : 'Dinner';
-          return (
-            <button key={c.id} className="row" style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', alignItems: 'stretch' }} onClick={() => nav(`/card/${c.id}`)}>
-              <span style={{ width: 56, fontSize: 13, fontWeight: 600, color: 'var(--text-2)', paddingTop: 12 }}>{clock(c.due!)}</span>
-              <span className="card grow" style={{ gap: 3, padding: '10px 14px' }}>
-                <span className="tag" style={{ color, fontSize: 11 }}>{l}</span>
-                <b>{title}</b>
-                <span className="muted">{c.createdBy === s.me.id ? 'You' : s.person(c.createdBy).name}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </>
-  );
-}
 
 interface Invite {
   id: string;

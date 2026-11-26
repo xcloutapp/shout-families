@@ -6,7 +6,8 @@ import { LogShout } from './screens/Create';
 import { ChatList, NewChat } from './screens/Chats';
 import Thread from './screens/Thread';
 import GuestRun from './screens/Guest';
-import { Balances, Calendar, Me } from './screens/Tabs';
+import { Balances, Me } from './screens/Tabs';
+import Calendar from './screens/Calendar';
 import { GroupSetup, Loading, Profile, SignIn, rememberJoin } from './screens/Setup';
 import { TabBar } from './ui';
 

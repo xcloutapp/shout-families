@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { deleteDoc, doc, getDoc, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from '../firebase';
 import { detect, detectLink, phraseKey } from '../intents';
+import { dayKey, describeDays, detectEvent } from '../dates';
 import { BOTTLE_SHOP, SHOPS } from '../seed';
 import { timeLeft, useStore } from '../store';
 import type { Card, Chat, DinnerCard, JobCard, Message, RunCard, Tokens } from '../types';
@@ -207,7 +208,17 @@ function Bubble({ m, prev, cid, onHold, toast }: { m: Message; prev?: Message; c
           {m.photoId && <Photo gid={s.group.id} id={m.photoId} press={press} />}
           {m.link && <div {...press}><LinkCard m={m} cid={cid} /></div>}
           {card && <CardInline card={card} toast={toast} />}
-          {m.note && <span style={{ fontSize: 12, color: '#ffb38a', fontWeight: 600 }}>{m.note}</span>}
+          {m.note && (
+            <span style={{ fontSize: 12, color: '#ffb38a', fontWeight: 600 }}>
+              {m.note}
+              {mine && m.eventId && (
+                <button className="btn quiet" style={{ minHeight: 24, padding: '0 0 0 8px', fontSize: 12 }} onClick={async () => {
+                  await s.deleteEvent(m.eventId!);
+                  await s.updateMessage(cid, m.id, { note: 'Removed from the calendar', eventId: '' });
+                }}>Undo</button>
+              )}
+            </span>
+          )}
           {mine && card && Date.now() - m.createdAt < 10 * 60000 && card.status === 'open' && (
             <button className="btn quiet" style={{ minHeight: 28, padding: 0, fontSize: 12 }} onClick={undo}>Not a {card.kind === 'job' ? ((card as JobCard).lift ? 'lift' : 'job') : card.kind}? Undo</button>
           )}
@@ -589,7 +600,16 @@ function Composer({ chat, toast }: { chat: Chat; toast: (s: string) => void }) {
     const hasTokens = Object.keys(tokens).length > 0;
     s.learnPhrase(t);
     const msgId = await s.sendMessage(cid, { text: t, tokens: hasTokens ? tokens : undefined });
-    if (!intent) return;
+    if (!intent) {
+      const ev = chat.kind === 'fun' ? null : detectEvent(t);
+      if (ev) {
+        const days = ev.days.map(dayKey);
+        const eventId = await s.addEvent({ personId: s.me.id, kind: ev.kind, title: ev.title, days, start: ev.startTime, end: ev.endTime, chatId: cid, msgId });
+        const when = describeDays(days) + (ev.startTime ? ` ${ev.startTime}${ev.endTime ? `–${ev.endTime}` : ''}` : '');
+        await s.updateMessage(cid, msgId, { eventId, note: `Added to the calendar: ${ev.title}, ${when}` });
+      }
+      return;
+    }
     const others = chat.memberIds.filter((id) => id !== s.me.id);
     if (intent.kind === 'run') {
       if (intent.shop === BOTTLE_SHOP && under18) {

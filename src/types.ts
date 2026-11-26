@@ -126,6 +126,7 @@ export interface Message {
   reactions?: Record<PersonId, 'good' | 'nah'>;
   replies?: Record<PersonId, string>;
   note?: string;
+  eventId?: string;
   dismissed?: boolean;
 }
 
@@ -139,4 +140,18 @@ export interface Share {
   orders: { name: string; text: string }[];
   closesAt?: number;
   open: boolean;
+}
+
+export interface CalEvent {
+  id: string;
+  personId: PersonId;
+  kind: 'away' | 'work' | 'event';
+  title: string;
+  days: string[]; // "2026-11-30"
+  start?: string; // "17:00"
+  end?: string;
+  createdBy: PersonId;
+  createdAt: number;
+  chatId?: string;
+  msgId?: string;
 }
