@@ -407,7 +407,7 @@ function RunInline({ c, toast }: { c: RunCard; toast: (s: string) => void }) {
     <div style={{ width: 300, background: '#1b1b21', border: `1px solid ${done ? '#2a2a33' : 'var(--accent)'}`, borderRadius: 20, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div className="between">
         <span className="tag" style={{ color: 'var(--accent)', fontSize: 11 }}>Run · {shops}</span>
-        <span className="muted" style={{ fontSize: 11 }}>{done ? 'finished' : c.locked ? 'locked in' : `closes in ${timeLeft(c.due)}`}</span>
+        <span className="muted" style={{ fontSize: 11 }}>{done ? 'finished' : c.locked ? 'locked in' : timeLeft(c.due) === 'closed' ? 'orders closed' : `closes in ${timeLeft(c.due)}`}</span>
       </div>
       <RunPlace c={c} />
       {c.orders.length === 0 && <span className="muted">No orders yet</span>}
@@ -571,7 +571,10 @@ function Composer({ chat, toast }: { chat: Chat; toast: (s: string) => void }) {
     [s.cards, cid],
   );
   const suggestions = useMemo(() => baseSuggestions(s, chat), [s, chat]);
-  const intent = text.trim() ? detect(text, s.members, { runOpen: !!openRun, places: s.takeaways }) : null;
+  const runCovers = openRun
+    ? openRun.stops.flatMap((x) => [x.shop, s.takeaways.find((p) => p.name.toLowerCase() === x.shop.toLowerCase())?.cuisine ?? ''].filter(Boolean))
+    : [];
+  const intent = text.trim() ? detect(text, s.members, { runOpen: !!openRun, places: s.takeaways, runCovers }) : null;
   const orderOffer = openRun && openRun.createdBy !== s.me.id && text.trim() && !intent && !detectLink(text) && !/\?$/.test(text.trim()) && text.trim().length > 2;
   const stopOffer = openRun && intent?.kind === 'stop' && openRun.createdBy !== s.me.id;
   const under18 = chat.memberIds.some((id) => !s.person(id).adult);

@@ -130,7 +130,7 @@ function addressee(text: string, people: Person[]): Person | undefined {
   return people.find((p) => p.name.toLowerCase() === first);
 }
 
-export function detect(text: string, people: Person[], opts: { runOpen: boolean; places?: PlaceRef[] }): Intent {
+export function detect(text: string, people: Person[], opts: { runOpen: boolean; places?: PlaceRef[]; runCovers?: string[] }): Intent {
   const t = text.trim();
   if (!t || /https?:\/\//i.test(t)) return null;
   const list = detectList(t);
@@ -152,7 +152,9 @@ export function detect(text: string, people: Person[], opts: { runOpen: boolean;
     return { kind: 'run', shop: 'Takeaway' };
   }
   // "Can I have KFC?" while a run is open = ask for another stop
-  if (shop && opts.runOpen && /\b(can i|could i|can you|can u|also|and)\b/i.test(t)) {
+  // Already covered by the open run ("I want pad thai" on a Thai run) = an order, not a new stop.
+  if (shop && opts.runOpen && opts.runCovers?.some((x) => x.toLowerCase() === shop.toLowerCase())) return null;
+  if (shop && opts.runOpen && /\b(can i|could i|can you|can u|also|and|i want|i'?d like|i'?ll have|i feel like)\b/i.test(t)) {
     return { kind: 'stop', shop };
   }
   if (/\bwho'?s (home|in) (for|tonight)|\bhome for dinner\b|\bwhat (should we|do (you|we) want|does everyone want) (have |to have )?for dinner\b|\bwhat'?s for dinner\b/i.test(t)) {

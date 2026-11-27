@@ -73,7 +73,7 @@ export function RunPlace({ c }: { c: RunCard }) {
         return (
           <div key={x.shop} className="col" style={{ gap: 6, background: '#16161b', borderRadius: 12, padding: 10 }}>
             <div className="between">
-              <b style={{ fontSize: 14 }}>{x.shop}</b>
+              <b style={{ fontSize: 14 }}>{place?.name ?? x.shop}</b>
               {(place?.phone || place?.menuUrl) && (
                 <button className="btn quiet" style={{ minHeight: 24, padding: 0, fontSize: 12 }} onClick={() => setEditing(place!)}>Edit</button>
               )}

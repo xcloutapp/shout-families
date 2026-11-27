@@ -418,8 +418,12 @@ export function useStore() {
     },
     lists: sess.lists,
     takeaways: [
-      ...sess.takeaways,
-      ...DIRECTORY.filter((d) => !sess.takeaways.some((t) => t.name.toLowerCase() === d.name.toLowerCase())).map(
+      // The family's own places, filling any gaps (phone, menu) from the built-in list.
+      ...sess.takeaways.map((t) => {
+        const d = DIRECTORY.find((x) => x.name.toLowerCase() === t.name.toLowerCase() || x.aliases?.some((a) => a.toLowerCase() === t.name.toLowerCase()));
+        return d ? { ...t, phone: t.phone || d.phone, menuUrl: t.menuUrl || d.menuUrl, aliases: d.aliases } : t;
+      }),
+      ...DIRECTORY.filter((d) => !sess.takeaways.some((t) => t.name.toLowerCase() === d.name.toLowerCase() || d.aliases?.some((a) => a.toLowerCase() === t.name.toLowerCase()))).map(
         (d): Place => ({ id: `dir:${d.name}`, name: d.name, cuisine: d.cuisine, phone: d.phone, menuUrl: d.menuUrl, aliases: d.aliases, addedBy: '', at: 0 }),
       ),
     ],
