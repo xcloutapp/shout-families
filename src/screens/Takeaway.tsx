@@ -35,7 +35,7 @@ export function usePlaceFor(c: RunCard) {
 const isGeneric = (shop: string) => TAKEAWAY.includes(shop);
 
 /** On a run: each stop's place with Menu and Call, "Where from?" for a stop like "Thai", and adding another place. */
-export function RunPlace({ c }: { c: RunCard }) {
+export function RunPlace({ c, mode = 'full' }: { c: RunCard; mode?: 'card' | 'manage' | 'full' }) {
   const s = useStore();
   const placeFor = usePlaceFor(c);
   const [picking, setPicking] = useState<{ replace?: string; cuisine: string } | null>(null);
@@ -56,6 +56,7 @@ export function RunPlace({ c }: { c: RunCard }) {
       {stops.map((x, i) => {
         const place = placeFor(x.shop, i);
         if (isGeneric(x.shop) && !place) {
+          if (mode === 'card' && !mineBuyer) return null;
           const saved = s.takeaways.filter((p) => p.cuisine === x.shop || x.shop === 'Takeaway');
           return (
             <div key={x.shop} className="col" style={{ gap: 6, background: '#16161b', borderRadius: 12, padding: 10 }}>
@@ -70,6 +71,10 @@ export function RunPlace({ c }: { c: RunCard }) {
           );
         }
         if (!place && !FOODISH.includes(x.shop)) return null;
+        // In the chat, a known place shows only as Call/Menu on the card's button row.
+        if (mode === 'card') return null;
+        // On the buyer's list, Call/Menu sit on each stop; here only offer to fill in missing details.
+        if (mode === 'manage' && place && (place.phone || place.menuUrl)) return null;
         return (
           <div key={x.shop} className="col" style={{ gap: 6, background: '#16161b', borderRadius: 12, padding: 10 }}>
             <div className="between">
@@ -89,7 +94,7 @@ export function RunPlace({ c }: { c: RunCard }) {
           </div>
         );
       })}
-      {stops.length < 4 && (
+      {stops.length < 4 && mode !== 'card' && (
         <button className="chip" style={{ alignSelf: 'flex-start' }} onClick={() => setPicking({ cuisine: 'Takeaway' })}>
           + {mineBuyer ? 'Another place' : `Ask ${s.person(c.createdBy).name} to add a place`}
         </button>

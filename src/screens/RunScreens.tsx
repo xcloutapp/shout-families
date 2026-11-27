@@ -171,6 +171,7 @@ export function BuyerList({ card: c }: { card: RunCard }) {
       <div>
         <h1 style={{ fontSize: 30 }}>Your run</h1>
         <div className="muted">{stops.length} stop{stops.length > 1 ? 's' : ''} · {c.orders.length} order{c.orders.length === 1 ? '' : 's'}{c.locked ? ` · ${ticked} of ${c.orders.length} ticked` : ''}</div>
+      <RunPlace c={c} mode="manage" />
       </div>
 
       {pending.map((p) => (

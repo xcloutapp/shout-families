@@ -9,7 +9,7 @@ import { timeLeft, useStore } from '../store';
 import type { Card, Chat, DinnerCard, JobCard, Message, RunCard, Tokens } from '../types';
 import { Avatar, Icon, Sheet, useToast } from '../ui';
 import { PeopleSheet } from './Chats';
-import { ListInline, RunPlace, lateLabel, orderTime } from './Takeaway';
+import { ListInline, RunPlace, lateLabel, usePlaceFor } from './Takeaway';
 
 type Store = ReturnType<typeof useStore>;
 
@@ -387,6 +387,10 @@ function RunInline({ c, toast }: { c: RunCard; toast: (s: string) => void }) {
   const mineBuyer = c.createdBy === s.me.id;
   const done = c.status === 'done';
   const pending = c.stops.filter((x) => !x.approved);
+  const placeFor = usePlaceFor(c);
+  const approved = c.stops.filter((x) => x.approved);
+  // With one place, Call (buyer) or Menu (everyone else) sits on the button row. With several, they're on the list.
+  const callPlace = approved.length === 1 ? placeFor(approved[0].shop, 0) : undefined;
   useGuestOrders(c, mineBuyer);
 
   const share = async () => {
@@ -406,21 +410,16 @@ function RunInline({ c, toast }: { c: RunCard; toast: (s: string) => void }) {
   return (
     <div style={{ width: 300, background: '#1b1b21', border: `1px solid ${done ? '#2a2a33' : 'var(--accent)'}`, borderRadius: 20, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div className="between">
-        <span className="tag" style={{ color: 'var(--accent)', fontSize: 11 }}>Run · {shops}</span>
+        <span className="tag" style={{ color: 'var(--accent)', fontSize: 11 }}>Run · {approved.map((x, i) => placeFor(x.shop, i)?.name ?? x.shop).join(' + ')}</span>
         <span className="muted" style={{ fontSize: 11 }}>{done ? 'finished' : c.locked ? 'locked in' : timeLeft(c.due) === 'closed' ? 'orders closed' : `closes in ${timeLeft(c.due)}`}</span>
       </div>
-      <RunPlace c={c} />
+      <RunPlace c={c} mode="card" />
       {c.orders.length === 0 && <span className="muted">No orders yet</span>}
       {c.orders.map((o) => (
         <div key={o.id} className="row" style={{ gap: 8 }}>
           <Avatar person={s.person(o.personId)} size={22} />
           <span className="grow" style={{ fontSize: 13 }}>{o.text}{c.stops.length > 1 ? <span className="muted"> · {o.stop}</span> : null}</span>
-          <span className="muted" style={{ fontSize: 11, color: lateLabel(c, o.at) ? '#ff8a7a' : undefined }}>{orderTime(o.at)}{lateLabel(c, o.at) ? ' · late' : ''}</span>
-          {(o.personId === s.me.id || mineBuyer) && !o.ticked && (
-            <button aria-label={`Delete ${o.text}`} onClick={() => confirm(`Delete "${o.text}"?`) && s.removeOrder(c.id, o.id)} style={{ background: 'none', border: 'none', color: 'var(--muted)', padding: 2, cursor: 'pointer' }}>
-              <Icon name="close" size={14} />
-            </button>
-          )}
+          {lateLabel(c, o.at) && <span style={{ fontSize: 11, color: '#ff8a7a', fontWeight: 700 }}>late</span>}
         </div>
       ))}
       {c.notMe.length > 0 && <span className="muted">Not ordering: {c.notMe.map((id) => s.person(id).name).join(', ')}</span>}
@@ -443,6 +442,12 @@ function RunInline({ c, toast }: { c: RunCard; toast: (s: string) => void }) {
               {!c.locked && <button className="btn primary grow" style={{ minHeight: 38, fontSize: 13 }} onClick={() => nav(`/card/${c.id}`)}>{c.orders.some((o) => o.personId === s.me.id) ? 'Change mine' : 'Add mine'}</button>}
               {!c.locked && !answered.has(s.me.id) && <button className="btn ghost" style={{ minHeight: 38, fontSize: 13 }} onClick={() => s.notMe(c.id)}>Not me</button>}
             </>
+          )}
+          {callPlace && mineBuyer && callPlace.phone && (
+            <a className="btn ghost" style={{ minHeight: 38, fontSize: 13, textDecoration: 'none', padding: '0 12px' }} href={`tel:${callPlace.phone.replace(/[^\d+]/g, '')}`} onClick={() => s.markCalled(c.id)}>Call</a>
+          )}
+          {callPlace && !mineBuyer && callPlace.menuUrl && (
+            <a className="btn ghost" style={{ minHeight: 38, fontSize: 13, textDecoration: 'none', padding: '0 12px' }} href={callPlace.menuUrl} target="_blank" rel="noreferrer">Menu</a>
           )}
           {!c.locked && (
             <button className="btn ghost" aria-label="Share link to another chat" style={{ minHeight: 38, width: 40, padding: 0 }} onClick={share}><Icon name="share" size={16} /></button>
@@ -652,7 +657,7 @@ function Composer({ chat, toast }: { chat: Chat; toast: (s: string) => void }) {
     }
   };
 
-  const showChips = !text && !picked && suggestions.length > 0;
+  const showChips = false;
 
   return (
     <div style={{ borderTop: '1px solid #1f1f26', background: '#0e0e11' }}>
@@ -728,7 +733,16 @@ function Composer({ chat, toast }: { chat: Chat; toast: (s: string) => void }) {
 
       {plus && (
         <Sheet onClose={() => setPlus(false)}>
-          <h2 style={{ fontSize: 22 }}>Start something</h2>
+          {suggestions.length > 0 && (
+            <>
+              <div className="label">Quick messages</div>
+              <div className="col" style={{ gap: 6 }}>
+                {suggestions.slice(0, 6).map((x) => (
+                  <button key={x} className="pill" style={{ justifyContent: 'flex-start', textAlign: 'left', minHeight: 40, fontSize: 14, background: '#1b1b21' }} onClick={() => { setText(x); setPicked(true); setPlus(false); }}>{x}</button>
+                ))}
+              </div>
+            </>
+          )}
           <div className="label">I'm going to…</div>
           <div className="shop-grid">
             {SHOPS.filter((x) => x !== 'Other' && (x !== BOTTLE_SHOP || (s.me.adult && !under18))).map((x) => (
