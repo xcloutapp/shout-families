@@ -91,6 +91,13 @@ service cloud.firestore {
       match /cards/{cardId} {
         allow read, write: if isMember(gid);
       }
+      // Shopping lists ("next time someone's at Coles…") and saved takeaway places.
+      match /lists/{shop} {
+        allow read, write: if isMember(gid);
+      }
+      match /places/{placeId} {
+        allow read, write: if isMember(gid);
+      }
       match /ledger/{entryId} {
         allow read, write: if isMember(gid);
       }

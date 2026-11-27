@@ -20,7 +20,8 @@ import {
   deleteField,
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import type { CalEvent, Card, Chat, DinnerCard, Group, GroupType, JobCard, LedgerEntry, Message, Person, PersonId, RunCard, Share, StatusLabel, Tokens, UserDoc } from './types';
+import type { CalEvent, Card, Chat, DinnerCard, Group, GroupType, JobCard, LedgerEntry, Message, Person, PersonId, Place, RunCard, RunOrder, Share, ShopList, StatusLabel, Tokens, UserDoc } from './types';
+import { GENERAL_LIST, SUPERMARKETS } from './seed';
 
 export const COLORS = ['#FFB38A', '#F5C6E0', '#B3A6FF', '#8FD3FF', '#6FD3A8', '#FFD27A', '#FF9AA2', '#C3E88D'];
 
@@ -37,6 +38,8 @@ interface Session {
   ledger: LedgerEntry[];
   chats: Chat[];
   events: CalEvent[];
+  lists: ShopList[];
+  takeaways: Place[];
 }
 
 const SessionCtx = createContext<Session | null>(null);
@@ -49,6 +52,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
   const [events, setEvents] = useState<CalEvent[]>([]);
+  const [lists, setLists] = useState<ShopList[]>([]);
+  const [takeaways, setTakeaways] = useState<Place[]>([]);
 
   useEffect(() => onAuthStateChanged(auth, (u) => setUser(u)), []);
 
@@ -65,6 +70,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setLedger([]);
     setChats([]);
     setEvents([]);
+    setLists([]);
+    setTakeaways([]);
     if (!gid || !user) return;
     ensureDefaultChats(gid).catch((e) => console.error('default chats', e));
     const unsubs = [
@@ -77,6 +84,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       ),
       onSnapshot(query(collection(db, 'groups', gid, 'events'), orderBy('createdAt', 'desc'), limit(300)), (q) =>
         setEvents(q.docs.map((d) => ({ ...(d.data() as CalEvent), id: d.id }))),
+      () => {}),
+      onSnapshot(collection(db, 'groups', gid, 'lists'), (q) => setLists(q.docs.map((d) => ({ ...(d.data() as ShopList), id: d.id }))), () => {}),
+      onSnapshot(collection(db, 'groups', gid, 'places'), (q) =>
+        setTakeaways(q.docs.map((d) => ({ ...(d.data() as Place), id: d.id })).sort((a, b) => b.at - a.at)),
       () => {}),
       onSnapshot(query(collection(db, 'groups', gid, 'ledger'), orderBy('createdAt', 'desc'), limit(300)), (q) =>
         setLedger(q.docs.map((d) => ({ ...(d.data() as LedgerEntry), id: d.id }))),
@@ -93,7 +104,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   else if (user && userDoc && group) phase = 'ready';
 
   return (
-    <SessionCtx.Provider value={{ phase, user: user ?? null, userDoc: userDoc ?? null, group: group ?? null, cards, ledger, chats, events }}>
+    <SessionCtx.Provider value={{ phase, user: user ?? null, userDoc: userDoc ?? null, group: group ?? null, cards, ledger, chats, events, lists, takeaways }}>
       {children}
     </SessionCtx.Provider>
   );
@@ -388,8 +399,12 @@ export function useStore() {
 
     setAdult: (id: PersonId, adult: boolean) => updateDoc(doc(db, 'groups', gid), { [`members.${id}.adult`]: adult }),
 
-    startRun(shop: string, forIds: PersonId[], due: number, chatId?: string, msgId?: string): string {
-      const card: Omit<RunCard, 'id'> = { ...base(forIds, due), kind: 'run', stops: [{ shop, addedBy: meId, approved: true }], orders: [], locked: false };
+    startRun(shop: string, forIds: PersonId[], due: number, chatId?: string, msgId?: string, placeId?: string): string {
+      // Anything waiting on the shopping list for this shop goes straight into the run.
+      const fromLists = sess.lists.filter((l) => l.items.length && (l.shop === shop || (l.shop === GENERAL_LIST && SUPERMARKETS.includes(shop))));
+      const orders: RunOrder[] = fromLists.flatMap((l) => l.items.map((i) => ({ id: uid(), personId: i.by, stop: shop, text: i.text, note: 'from the list', ticked: false })));
+      fromLists.forEach((l) => updateDoc(doc(db, 'groups', gid, 'lists', l.id), { items: [] }).catch(() => {}));
+      const card: Omit<RunCard, 'id'> = { ...base(forIds, due), kind: 'run', stops: [{ shop, addedBy: meId, approved: true }], orders, locked: false, ...(placeId ? { placeId } : {}) };
       if (chatId) {
         const ref = doc(collection(db, 'groups', gid, 'cards'));
         setDoc(ref, { ...card, chatId }).then(async () => {
@@ -399,6 +414,48 @@ export function useStore() {
         return ref.id;
       }
       return newCard<RunCard>(card);
+    },
+    lists: sess.lists,
+    takeaways: sess.takeaways,
+    /** Add items to a shop's list, or straight into an open run there. Returns where they went. */
+    async addToList(shop: string, items: string[]): Promise<'run' | 'list'> {
+      const run = sess.cards.find(
+        (c): c is RunCard => c.kind === 'run' && !c.locked && c.status !== 'done' && c.stops.some((x) => x.approved && (x.shop === shop || (shop === GENERAL_LIST && SUPERMARKETS.includes(x.shop)))),
+      );
+      if (run) {
+        const stop = run.stops.find((x) => x.approved && (x.shop === shop || SUPERMARKETS.includes(x.shop)))!.shop;
+        updateCard<RunCard>(run.id, (c) => ({ ...c, orders: [...c.orders, ...items.map((text) => ({ id: uid(), personId: meId, stop, text, ticked: false }))] }));
+        return 'run';
+      }
+      const ref = doc(db, 'groups', gid, 'lists', shop);
+      await runTransaction(db, async (tx) => {
+        const cur = await tx.get(ref);
+        const have = cur.exists() ? ((cur.data() as ShopList).items ?? []) : [];
+        const fresh = items.filter((t) => !have.some((h) => h.text.toLowerCase() === t.toLowerCase()));
+        tx.set(ref, { shop, items: [...have, ...fresh.map((text) => ({ id: uid(), text, by: meId, at: Date.now() }))] });
+      });
+      return 'list';
+    },
+    removeListItem(shop: string, itemId: string) {
+      const ref = doc(db, 'groups', gid, 'lists', shop);
+      return runTransaction(db, async (tx) => {
+        const cur = await tx.get(ref);
+        if (!cur.exists()) return;
+        tx.update(ref, { items: ((cur.data() as ShopList).items ?? []).filter((i) => i.id !== itemId) });
+      });
+    },
+    async addTakeaway(p: { name: string; cuisine: string; phone?: string; menuUrl?: string }): Promise<string> {
+      const ref = doc(collection(db, 'groups', gid, 'places'));
+      await setDoc(ref, { ...p, addedBy: meId, at: Date.now() });
+      return ref.id;
+    },
+    updateTakeaway: (id: string, p: Partial<Pick<Place, 'name' | 'phone' | 'menuUrl'>>) => updateDoc(doc(db, 'groups', gid, 'places', id), p),
+    setRunPlace(cardId: string, placeId: string | null) {
+      updateCard<RunCard>(cardId, (c) => {
+        const { placeId: _old, ...rest } = c;
+        void _old;
+        return placeId ? { ...rest, placeId } : rest;
+      });
     },
     addOrder(cardId: string, stop: string, text: string, note?: string) {
       updateCard<RunCard>(cardId, (c) => ({

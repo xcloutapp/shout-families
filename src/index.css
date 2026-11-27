@@ -63,6 +63,7 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 .pill { min-height: 40px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line-2); background: none; font-size: 14px; }
 .pill.on { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 700; }
 .chip { font-size: 12px; padding: 5px 10px; border-radius: 999px; background: var(--chip); color: var(--text-2); }
+button.chip { border: none; cursor: pointer; font: inherit; font-size: 13px; padding: 8px 12px; color: var(--text); }
 
 .input { min-height: 48px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface-2); padding: 0 14px; font-size: 16px; width: 100%; }
 .input:focus { outline: 2px solid var(--accent); border-color: transparent; }

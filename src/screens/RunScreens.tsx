@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FAST_FOOD, SHOPS, BOTTLE_SHOP } from '../seed';
+import { PlaceButtons } from './Takeaway';
 import { clock, timeLeft, useStore } from '../store';
 import type { RunCard } from '../types';
 import { Avatar, Icon, Sheet, TopBar, useToast } from '../ui';
@@ -22,6 +23,7 @@ export function AddOrder({ card: c }: { card: RunCard }) {
   const buyer = s.person(c.createdBy);
   const text = typed.trim() || pick || '';
   const isFood = FAST_FOOD.includes(stop);
+  const orderPlace = c.placeId ? s.takeaways.find((p) => p.id === c.placeId) : undefined;
 
   if (c.locked) {
     return (
@@ -50,9 +52,12 @@ export function AddOrder({ card: c }: { card: RunCard }) {
         <button className="icon-btn" aria-label="Back" onClick={() => nav(-1)}><Icon name="back" size={18} stroke={2.5} /></button>
         <div className="col" style={{ gap: 2 }}>
           <span className="muted">{c.createdBy === s.me.id ? 'Your run' : `${buyer.name}'s going to`}</span>
-          <b style={{ fontSize: 16 }}>{stops.map((x) => x.shop).join(' + ')}</b>
+          <b style={{ fontSize: 16 }}>{orderPlace ? orderPlace.name : stops.map((x) => x.shop).join(' + ')}</b>
         </div>
       </div>
+      {orderPlace?.menuUrl && (
+        <a className="btn ghost" style={{ textDecoration: 'none' }} href={orderPlace.menuUrl} target="_blank" rel="noreferrer">See the menu</a>
+      )}
 
       {c.due && (
         <div className="between" style={{ background: '#2a1a12', borderRadius: 16, padding: '12px 14px' }}>
@@ -152,6 +157,7 @@ export function BuyerList({ card: c }: { card: RunCard }) {
   const ticked = c.orders.filter((o) => o.ticked).length;
   const people = [...new Set(c.orders.map((o) => o.personId))];
   const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const place = c.placeId ? s.takeaways.find((p) => p.id === c.placeId) : undefined;
 
   if (showAdd) return <AddOrderInline card={c} onBack={() => setShowAdd(false)} />;
 
@@ -163,6 +169,7 @@ export function BuyerList({ card: c }: { card: RunCard }) {
           {c.locked ? 'Locked in' : `Open · closes in ${timeLeft(c.due)}`}
         </span>
       </div>
+      {place && (place.phone || place.menuUrl) && <PlaceButtons place={place} big />}
       <div>
         <h1 style={{ fontSize: 30 }}>Your run</h1>
         <div className="muted">{stops.length} stop{stops.length > 1 ? 's' : ''} · {c.orders.length} order{c.orders.length === 1 ? '' : 's'}{c.locked ? ` · ${ticked} of ${c.orders.length} ticked` : ''}</div>

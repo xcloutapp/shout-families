@@ -4,11 +4,12 @@ import { deleteDoc, doc, getDoc, limit, onSnapshot, orderBy, query } from 'fireb
 import { db } from '../firebase';
 import { detect, detectLink, phraseKey } from '../intents';
 import { dayKey, describeDays, detectEvent } from '../dates';
-import { BOTTLE_SHOP, SHOPS } from '../seed';
+import { BOTTLE_SHOP, SHOPS, SUPERMARKETS } from '../seed';
 import { timeLeft, useStore } from '../store';
 import type { Card, Chat, DinnerCard, JobCard, Message, RunCard, Tokens } from '../types';
 import { Avatar, Icon, Sheet, useToast } from '../ui';
 import { PeopleSheet } from './Chats';
+import { ListInline, RunPlace } from './Takeaway';
 
 type Store = ReturnType<typeof useStore>;
 
@@ -132,7 +133,7 @@ export default function Thread() {
           </div>
         )}
         {msgs.map((m, i) => (
-          <Bubble key={m.id} m={m} prev={msgs[i - 1]} cid={cid} onHold={() => setActionsFor(m)} toast={toast.show} />
+          <Bubble key={m.id} m={m} prev={msgs[i - 1]} cid={cid} onHold={() => setActionsFor(m)} toast={toast.show} latestList={!!m.listShop && !msgs.slice(i + 1).some((x) => x.listShop === m.listShop)} />
         ))}
         <div ref={endRef} />
       </div>
@@ -168,7 +169,7 @@ function useLongPress(cb: () => void) {
   };
 }
 
-function Bubble({ m, prev, cid, onHold, toast }: { m: Message; prev?: Message; cid: string; onHold: () => void; toast: (s: string) => void }) {
+function Bubble({ m, prev, cid, onHold, toast, latestList }: { m: Message; prev?: Message; cid: string; onHold: () => void; toast: (s: string) => void; latestList?: boolean }) {
   const s = useStore();
   const mine = m.authorId === s.me.id;
   const author = s.person(m.authorId);
@@ -208,6 +209,7 @@ function Bubble({ m, prev, cid, onHold, toast }: { m: Message; prev?: Message; c
           {m.photoId && <Photo gid={s.group.id} id={m.photoId} press={press} />}
           {m.link && <div {...press}><LinkCard m={m} cid={cid} /></div>}
           {card && <CardInline card={card} toast={toast} />}
+          {m.listShop && <ListInline shop={m.listShop} latest={!!latestList} />}
           {m.note && (
             <span style={{ fontSize: 12, color: '#ffb38a', fontWeight: 600 }}>
               {m.note}
@@ -407,6 +409,7 @@ function RunInline({ c, toast }: { c: RunCard; toast: (s: string) => void }) {
         <span className="tag" style={{ color: 'var(--accent)', fontSize: 11 }}>Run · {shops}</span>
         <span className="muted" style={{ fontSize: 11 }}>{done ? 'finished' : c.locked ? 'locked in' : `closes in ${timeLeft(c.due)}`}</span>
       </div>
+      <RunPlace c={c} />
       {c.orders.length === 0 && <span className="muted">No orders yet</span>}
       {c.orders.map((o) => (
         <div key={o.id} className="row" style={{ gap: 8 }}>
@@ -562,7 +565,7 @@ function Composer({ chat, toast }: { chat: Chat; toast: (s: string) => void }) {
     [s.cards, cid],
   );
   const suggestions = useMemo(() => baseSuggestions(s, chat), [s, chat]);
-  const intent = text.trim() ? detect(text, s.members, { runOpen: !!openRun }) : null;
+  const intent = text.trim() ? detect(text, s.members, { runOpen: !!openRun, places: s.takeaways }) : null;
   const orderOffer = openRun && openRun.createdBy !== s.me.id && text.trim() && !intent && !detectLink(text) && !/\?$/.test(text.trim()) && text.trim().length > 2;
   const stopOffer = openRun && intent?.kind === 'stop' && openRun.createdBy !== s.me.id;
   const under18 = chat.memberIds.some((id) => !s.person(id).adult);
@@ -597,6 +600,17 @@ function Composer({ chat, toast }: { chat: Chat; toast: (s: string) => void }) {
       return;
     }
 
+    if (intent?.kind === 'list') {
+      const where = await s.addToList(intent.shop, intent.items);
+      const label = intent.shop === 'Groceries' ? 'shopping list' : `${intent.shop} list`;
+      if (where === 'run') {
+        await s.sendMessage(cid, { text: t, note: `Added to the ${intent.shop === 'Groceries' ? '' : `${intent.shop} `}run that's on now` });
+      } else {
+        await s.sendMessage(cid, { text: t, listShop: intent.shop, note: `Added to the ${label}: ${intent.items.join(', ')}` });
+      }
+      return;
+    }
+
     const hasTokens = Object.keys(tokens).length > 0;
     s.learnPhrase(t);
     const msgId = await s.sendMessage(cid, { text: t, tokens: hasTokens ? tokens : undefined });
@@ -616,7 +630,10 @@ function Composer({ chat, toast }: { chat: Chat; toast: (s: string) => void }) {
         await s.updateMessage(cid, msgId, { note: "Bottle shop runs can't include under-18s. Start a chat without them." });
         return;
       }
-      s.startRun(intent.shop, chat.memberIds, Date.now() + 20 * 60000, cid, msgId);
+      const waiting = s.lists.filter((l) => l.items.length && (l.shop === intent.shop || (l.shop === 'Groceries' && SUPERMARKETS.includes(intent.shop))));
+      s.startRun(intent.shop, chat.memberIds, Date.now() + 20 * 60000, cid, msgId, intent.placeId);
+      const n = waiting.reduce((a, l) => a + l.items.length, 0);
+      if (n) toast(`Added ${n} thing${n > 1 ? 's' : ''} from the shopping list`);
     } else if (intent.kind === 'job') {
       s.startJob(intent.title, others, dueFrom(tokens.when), { chatId: cid, msgId, assignee: intent.assignee, tokens: hasTokens ? tokens : undefined });
     } else if (intent.kind === 'lift') {

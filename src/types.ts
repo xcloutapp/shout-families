@@ -60,6 +60,33 @@ export interface RunCard extends CardBase {
   stops: { shop: string; addedBy: PersonId; approved: boolean }[];
   orders: RunOrder[];
   locked: boolean;
+  /** A saved place (menu + phone) for this run. */
+  placeId?: string;
+}
+
+/** A saved takeaway place: tap Menu or Call from a run. */
+export interface Place {
+  id: string;
+  name: string;
+  cuisine: string;
+  phone?: string;
+  menuUrl?: string;
+  addedBy: PersonId;
+  at: number;
+}
+
+export interface ListItem {
+  id: string;
+  text: string;
+  by: PersonId;
+  at: number;
+}
+
+/** "Next time someone's at Coles…" items, waiting for the next run there. Doc id = shop name. */
+export interface ShopList {
+  id: string;
+  shop: string;
+  items: ListItem[];
 }
 
 export interface DinnerCard extends CardBase {
@@ -128,6 +155,8 @@ export interface Message {
   note?: string;
   eventId?: string;
   dismissed?: boolean;
+  /** This message added to a shopping list (shows the list). */
+  listShop?: string;
 }
 
 export interface Share {
