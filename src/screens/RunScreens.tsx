@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FAST_FOOD, SHOPS, BOTTLE_SHOP } from '../seed';
-import { PlaceButtons, RunPlace, usePlaceFor } from './Takeaway';
+import { PlaceButtons, RunPlace, lateLabel, orderTime, usePlaceFor } from './Takeaway';
 import { clock, timeLeft, useStore } from '../store';
 import type { RunCard } from '../types';
 import { Avatar, Icon, Sheet, TopBar, useToast } from '../ui';
@@ -78,7 +78,7 @@ export function AddOrder({ card: c }: { card: RunCard }) {
           <div className="label">You've added</div>
           {mine.map((o) => (
             <div key={o.id} className="between">
-              <span>{o.text} <span className="muted">· {o.stop}</span></span>
+              <span>{o.text} <span className="muted">· {o.stop}{o.at ? ` · ${orderTime(o.at)}` : ''}</span></span>
               <button className="btn quiet" style={{ minHeight: 36 }} onClick={() => s.removeOrder(c.id, o.id)}>Remove</button>
             </div>
           ))}
@@ -193,7 +193,7 @@ export function BuyerList({ card: c }: { card: RunCard }) {
             </div>
             {(() => {
               const p = placeFor(st.shop, i);
-              return p && (p.phone || p.menuUrl) ? <div style={{ paddingBottom: 8 }}><PlaceButtons place={p} /></div> : null;
+              return p && (p.phone || p.menuUrl) ? <div style={{ paddingBottom: 8 }}><PlaceButtons place={p} onCall={() => s.markCalled(c.id)} /></div> : null;
             })()}
             {orders.length === 0 && <div className="order-row muted">Nothing yet</div>}
             {orders.map((o) => (
@@ -206,11 +206,16 @@ export function BuyerList({ card: c }: { card: RunCard }) {
                 <Avatar person={s.person(o.personId)} size={34} />
                 <span className="col grow" style={{ gap: 2, opacity: o.ticked ? 0.5 : 1 }}>
                   <b style={{ fontSize: 15 }}>{o.text}</b>
-                  <span className="muted">{o.personId === s.me.id ? 'You' : s.person(o.personId).name}{o.note ? ` · ${o.note}` : ''}{o.missing ? ` · ${o.missing}` : ''}</span>
+                  <span className="muted">{o.personId === s.me.id ? 'You' : s.person(o.personId).name}{o.at ? ` · ${orderTime(o.at)}` : ''}{o.note ? ` · ${o.note}` : ''}{o.missing ? ` · ${o.missing}` : ''}</span>
+                  {lateLabel(c, o.at) && <span style={{ fontSize: 12, fontWeight: 700, color: '#ff8a7a' }}>Late: {lateLabel(c, o.at)}</span>}
                 </span>
                 {c.locked && !o.ticked && (
                   <button className="btn quiet" style={{ minHeight: 36, padding: '0 6px', fontSize: 13 }} onClick={() => setMissingFor(o.id)}>Can't get</button>
                 )}
+                <button className="icon-btn" aria-label={`Delete ${o.text}`} style={{ width: 32, height: 32, background: 'none', color: 'var(--muted)' }}
+                  onClick={() => confirm(`Delete "${o.text}"?`) && s.removeOrder(c.id, o.id)}>
+                  <Icon name="close" size={16} />
+                </button>
               </div>
             ))}
           </div>

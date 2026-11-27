@@ -22,6 +22,7 @@ import {
 import { auth, db } from './firebase';
 import type { CalEvent, Card, Chat, DinnerCard, Group, GroupType, JobCard, LedgerEntry, Message, Person, PersonId, Place, RunCard, RunOrder, Share, ShopList, StatusLabel, Tokens, UserDoc } from './types';
 import { GENERAL_LIST, SUPERMARKETS } from './seed';
+import { DIRECTORY } from './data/takeaways';
 
 export const COLORS = ['#FFB38A', '#F5C6E0', '#B3A6FF', '#8FD3FF', '#6FD3A8', '#FFD27A', '#FF9AA2', '#C3E88D'];
 
@@ -314,7 +315,7 @@ export function useStore() {
       return updateCard<RunCard>(cardId, (c) => ({
         ...c,
         notMe: c.notMe.filter((p) => p !== personId),
-        orders: [...c.orders, { id: uid(), personId, stop, text, ticked: false }],
+        orders: [...c.orders, { id: uid(), personId, stop, text, ticked: false, at: Date.now() }],
       }));
     },
     react: (cid: string, mid: string, val: 'good' | 'nah' | null) =>
@@ -402,7 +403,7 @@ export function useStore() {
     startRun(shop: string, forIds: PersonId[], due: number, chatId?: string, msgId?: string, placeId?: string): string {
       // Anything waiting on the shopping list for this shop goes straight into the run.
       const fromLists = sess.lists.filter((l) => l.items.length && (l.shop === shop || (l.shop === GENERAL_LIST && SUPERMARKETS.includes(shop))));
-      const orders: RunOrder[] = fromLists.flatMap((l) => l.items.map((i) => ({ id: uid(), personId: i.by, stop: shop, text: i.text, note: 'from the list', ticked: false })));
+      const orders: RunOrder[] = fromLists.flatMap((l) => l.items.map((i) => ({ id: uid(), personId: i.by, stop: shop, text: i.text, note: 'from the list', ticked: false, at: i.at })));
       fromLists.forEach((l) => updateDoc(doc(db, 'groups', gid, 'lists', l.id), { items: [] }).catch(() => {}));
       const card: Omit<RunCard, 'id'> = { ...base(forIds, due), kind: 'run', stops: [{ shop, addedBy: meId, approved: true }], orders, locked: false, ...(placeId ? { placeId } : {}) };
       if (chatId) {
@@ -416,7 +417,12 @@ export function useStore() {
       return newCard<RunCard>(card);
     },
     lists: sess.lists,
-    takeaways: sess.takeaways,
+    takeaways: [
+      ...sess.takeaways,
+      ...DIRECTORY.filter((d) => !sess.takeaways.some((t) => t.name.toLowerCase() === d.name.toLowerCase())).map(
+        (d): Place => ({ id: `dir:${d.name}`, name: d.name, cuisine: d.cuisine, phone: d.phone, menuUrl: d.menuUrl, addedBy: '', at: 0 }),
+      ),
+    ],
     /** Add items to a shop's list, or straight into an open run there. Returns where they went. */
     async addToList(shop: string, items: string[]): Promise<'run' | 'list'> {
       const run = sess.cards.find(
@@ -424,7 +430,7 @@ export function useStore() {
       );
       if (run) {
         const stop = run.stops.find((x) => x.approved && (x.shop === shop || SUPERMARKETS.includes(x.shop)))!.shop;
-        updateCard<RunCard>(run.id, (c) => ({ ...c, orders: [...c.orders, ...items.map((text) => ({ id: uid(), personId: meId, stop, text, ticked: false }))] }));
+        updateCard<RunCard>(run.id, (c) => ({ ...c, orders: [...c.orders, ...items.map((text) => ({ id: uid(), personId: meId, stop, text, ticked: false, at: Date.now() }))] }));
         return 'run';
       }
       const ref = doc(db, 'groups', gid, 'lists', shop);
@@ -449,7 +455,18 @@ export function useStore() {
       await setDoc(ref, { ...p, addedBy: meId, at: Date.now() });
       return ref.id;
     },
-    updateTakeaway: (id: string, p: Partial<Pick<Place, 'name' | 'phone' | 'menuUrl'>>) => updateDoc(doc(db, 'groups', gid, 'places', id), p),
+    async updateTakeaway(id: string, p: Partial<Pick<Place, 'name' | 'phone' | 'menuUrl'>>) {
+      // A built-in place: save the family's own copy with their changes.
+      if (id.startsWith('dir:')) {
+        const d = DIRECTORY.find((x) => `dir:${x.name}` === id);
+        if (!d) return;
+        const ref = doc(collection(db, 'groups', gid, 'places'));
+        const merged = { name: d.name, cuisine: d.cuisine, ...(d.phone ? { phone: d.phone } : {}), ...(d.menuUrl ? { menuUrl: d.menuUrl } : {}), ...p };
+        await setDoc(ref, { ...merged, addedBy: meId, at: Date.now() });
+        return;
+      }
+      await updateDoc(doc(db, 'groups', gid, 'places', id), p);
+    },
     /** Turn a stop like "Thai" or "Takeaway" into a real place ("Otter Thai"); orders move with it. */
     setStopPlace(cardId: string, oldShop: string, name: string) {
       updateCard<RunCard>(cardId, (c) => {
@@ -480,8 +497,11 @@ export function useStore() {
       updateCard<RunCard>(cardId, (c) => ({
         ...c,
         notMe: c.notMe.filter((p) => p !== meId),
-        orders: [...c.orders, { id: uid(), personId: meId, stop, text, note, ticked: false }],
+        orders: [...c.orders, { id: uid(), personId: meId, stop, text, note, ticked: false, at: Date.now() }],
       }));
+    },
+    markCalled(cardId: string) {
+      updateCard<RunCard>(cardId, (c) => ({ ...c, calledAt: Date.now() }));
     },
     removeOrder(cardId: string, orderId: string) {
       updateCard<RunCard>(cardId, (c) => ({ ...c, orders: c.orders.filter((o) => o.id !== orderId) }));
@@ -499,7 +519,7 @@ export function useStore() {
       }));
     },
     lockRun(cardId: string) {
-      updateCard<RunCard>(cardId, (c) => ({ ...c, locked: true, status: 'claimed', claimedBy: c.createdBy }));
+      updateCard<RunCard>(cardId, (c) => ({ ...c, locked: true, lockedAt: Date.now(), status: 'claimed', claimedBy: c.createdBy }));
     },
     tick(cardId: string, orderId: string) {
       updateCard<RunCard>(cardId, (c) => ({

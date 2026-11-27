@@ -53,6 +53,8 @@ export interface RunOrder {
   note?: string;
   ticked: boolean;
   missing?: string;
+  /** When the order was added. */
+  at?: number;
 }
 
 export interface RunCard extends CardBase {
@@ -62,6 +64,9 @@ export interface RunCard extends CardBase {
   locked: boolean;
   /** A saved place (menu + phone) for this run. */
   placeId?: string;
+  /** When the buyer locked the run in, and when they last tapped Call (orders after either are flagged). */
+  lockedAt?: number;
+  calledAt?: number;
 }
 
 /** A saved takeaway place: tap Menu or Call from a run. */

@@ -7,7 +7,7 @@ import { Avatar, Sheet } from '../ui';
 const telHref = (phone: string) => `tel:${phone.replace(/[^\d+]/g, '')}`;
 
 /** Menu and Call buttons for a saved place. */
-export function PlaceButtons({ place, big }: { place: Place; big?: boolean }) {
+export function PlaceButtons({ place, big, onCall }: { place: Place; big?: boolean; onCall?: () => void }) {
   const h = big ? 48 : 36;
   return (
     <div className="row" style={{ gap: 6 }}>
@@ -17,7 +17,7 @@ export function PlaceButtons({ place, big }: { place: Place; big?: boolean }) {
         </a>
       )}
       {place.phone && (
-        <a className="btn primary grow" style={{ minHeight: h, fontSize: 14, textDecoration: 'none' }} href={telHref(place.phone)}>
+        <a className="btn primary grow" style={{ minHeight: h, fontSize: 14, textDecoration: 'none' }} href={telHref(place.phone)} onClick={onCall}>
           Call {big ? place.name : ''}
         </a>
       )}
@@ -79,7 +79,7 @@ export function RunPlace({ c }: { c: RunCard }) {
               )}
             </div>
             {place && (place.phone || place.menuUrl) ? (
-              <PlaceButtons place={place} />
+              <PlaceButtons place={place} onCall={c.createdBy === s.me.id ? () => s.markCalled(c.id) : undefined} />
             ) : (
               <button className="btn quiet" style={{ minHeight: 28, padding: 0, fontSize: 13, alignSelf: 'flex-start' }}
                 onClick={async () => setEditing(place ?? { id: await s.addTakeaway({ name: x.shop, cuisine: 'Takeaway' }), name: x.shop, cuisine: 'Takeaway', addedBy: s.me.id, at: Date.now() })}>
@@ -218,4 +218,15 @@ export function ListInline({ shop, latest }: { shop: string; latest: boolean }) 
       )}
     </div>
   );
+}
+
+/** "5:42pm" */
+export const orderTime = (t?: number) => (t ? new Date(t).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' }).replace(' ', '').toLowerCase() : '');
+
+/** Was this order added after the buyer phoned the order through or locked the run in? */
+export function lateLabel(c: RunCard, at?: number): string | null {
+  if (!at) return null;
+  if (c.lockedAt && at > c.lockedAt) return 'added after it was locked in';
+  if (c.calledAt && at > c.calledAt) return 'added after the call';
+  return null;
 }

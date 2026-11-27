@@ -9,7 +9,7 @@ import { timeLeft, useStore } from '../store';
 import type { Card, Chat, DinnerCard, JobCard, Message, RunCard, Tokens } from '../types';
 import { Avatar, Icon, Sheet, useToast } from '../ui';
 import { PeopleSheet } from './Chats';
-import { ListInline, RunPlace } from './Takeaway';
+import { ListInline, RunPlace, lateLabel, orderTime } from './Takeaway';
 
 type Store = ReturnType<typeof useStore>;
 
@@ -414,7 +414,13 @@ function RunInline({ c, toast }: { c: RunCard; toast: (s: string) => void }) {
       {c.orders.map((o) => (
         <div key={o.id} className="row" style={{ gap: 8 }}>
           <Avatar person={s.person(o.personId)} size={22} />
-          <span style={{ fontSize: 13 }}>{o.text}{c.stops.length > 1 ? <span className="muted"> · {o.stop}</span> : null}</span>
+          <span className="grow" style={{ fontSize: 13 }}>{o.text}{c.stops.length > 1 ? <span className="muted"> · {o.stop}</span> : null}</span>
+          <span className="muted" style={{ fontSize: 11, color: lateLabel(c, o.at) ? '#ff8a7a' : undefined }}>{orderTime(o.at)}{lateLabel(c, o.at) ? ' · late' : ''}</span>
+          {(o.personId === s.me.id || mineBuyer) && !o.ticked && (
+            <button aria-label={`Delete ${o.text}`} onClick={() => confirm(`Delete "${o.text}"?`) && s.removeOrder(c.id, o.id)} style={{ background: 'none', border: 'none', color: 'var(--muted)', padding: 2, cursor: 'pointer' }}>
+              <Icon name="close" size={14} />
+            </button>
+          )}
         </div>
       ))}
       {c.notMe.length > 0 && <span className="muted">Not ordering: {c.notMe.map((id) => s.person(id).name).join(', ')}</span>}
