@@ -450,6 +450,25 @@ export function useStore() {
       return ref.id;
     },
     updateTakeaway: (id: string, p: Partial<Pick<Place, 'name' | 'phone' | 'menuUrl'>>) => updateDoc(doc(db, 'groups', gid, 'places', id), p),
+    /** Turn a stop like "Thai" or "Takeaway" into a real place ("Otter Thai"); orders move with it. */
+    setStopPlace(cardId: string, oldShop: string, name: string) {
+      updateCard<RunCard>(cardId, (c) => {
+        const { placeId: _p, ...rest } = c;
+        void _p;
+        if (c.stops.some((x) => x.shop === name)) return { ...rest, stops: rest.stops.filter((x) => x.shop !== oldShop), orders: rest.orders.map((o) => (o.stop === oldShop ? { ...o, stop: name } : o)) };
+        return {
+          ...rest,
+          stops: rest.stops.map((x) => (x.shop === oldShop ? { ...x, shop: name } : x)),
+          orders: rest.orders.map((o) => (o.stop === oldShop ? { ...o, stop: name } : o)),
+        };
+      });
+    },
+    /** Add another place to a run. The buyer adds it straight away; anyone else asks the buyer. */
+    addPlaceStop(cardId: string, name: string) {
+      updateCard<RunCard>(cardId, (c) =>
+        c.stops.some((x) => x.shop === name) || c.stops.length >= 4 ? c : { ...c, stops: [...c.stops, { shop: name, addedBy: meId, approved: c.createdBy === meId }] },
+      );
+    },
     setRunPlace(cardId: string, placeId: string | null) {
       updateCard<RunCard>(cardId, (c) => {
         const { placeId: _old, ...rest } = c;

@@ -25,49 +25,138 @@ export function PlaceButtons({ place, big }: { place: Place; big?: boolean }) {
   );
 }
 
-/** On a takeaway run: which place it's from, with Menu and Call. */
+/** The saved place for a stop, matched by name (or the older placeId link on the first stop). */
+export function usePlaceFor(c: RunCard) {
+  const s = useStore();
+  return (shop: string, i: number) =>
+    s.takeaways.find((p) => p.name.toLowerCase() === shop.toLowerCase()) ?? (i === 0 && c.placeId ? s.takeaways.find((p) => p.id === c.placeId) : undefined);
+}
+
+const isGeneric = (shop: string) => TAKEAWAY.includes(shop);
+
+/** On a run: each stop's place with Menu and Call, "Where from?" for a stop like "Thai", and adding another place. */
 export function RunPlace({ c }: { c: RunCard }) {
   const s = useStore();
-  const [adding, setAdding] = useState(false);
+  const placeFor = usePlaceFor(c);
+  const [picking, setPicking] = useState<{ replace?: string; cuisine: string } | null>(null);
   const [editing, setEditing] = useState<Place | null>(null);
-  const shop = c.stops[0].shop;
-  const place = c.placeId ? s.takeaways.find((p) => p.id === c.placeId) : undefined;
-  const isFood = TAKEAWAY.includes(shop) || !!place;
-  if (!isFood || c.status === 'done') return null;
+  const stops = c.stops.filter((x) => x.approved);
+  const foodRun = stops.some((x, i) => isGeneric(x.shop) || placeFor(x.shop, i)) || FOODISH.includes(stops[0]?.shop);
+  if (!foodRun || c.status === 'done') return null;
+  const mineBuyer = c.createdBy === s.me.id;
 
-  if (place) {
-    return (
-      <div className="col" style={{ gap: 6, background: '#16161b', borderRadius: 12, padding: 10 }}>
-        <div className="between">
-          <b style={{ fontSize: 14 }}>{place.name}</b>
-          <button className="btn quiet" style={{ minHeight: 24, padding: 0, fontSize: 12 }} onClick={() => s.setRunPlace(c.id, null)}>Change</button>
-        </div>
-        {!place.phone && !place.menuUrl ? (
-          <button className="btn quiet" style={{ minHeight: 28, padding: 0, fontSize: 13, alignSelf: 'flex-start' }} onClick={() => setEditing(place)}>+ Add phone number or menu</button>
-        ) : (
-          <PlaceButtons place={place} />
-        )}
-        {editing && <PlaceSheet cuisine={shop} place={editing} onClose={() => setEditing(null)} onSaved={() => setEditing(null)} />}
-      </div>
-    );
-  }
+  const pick = (name: string) => {
+    if (picking?.replace) s.setStopPlace(c.id, picking.replace, name);
+    else s.addPlaceStop(c.id, name);
+    setPicking(null);
+  };
 
-  const choices = s.takeaways.filter((p) => p.cuisine === shop || shop === 'Takeaway');
   return (
     <div className="col" style={{ gap: 6 }}>
-      <span className="muted" style={{ fontSize: 12 }}>Where from?</span>
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-        {choices.map((p) => (
-          <button key={p.id} className="chip" onClick={() => s.setRunPlace(c.id, p.id)}>{p.name}</button>
-        ))}
-        <button className="chip" onClick={() => setAdding(true)}>+ {choices.length ? 'Somewhere else' : `Add a ${shop === 'Takeaway' ? 'place' : `${shop} place`}`}</button>
-      </div>
-      {adding && <PlaceSheet cuisine={shop} onClose={() => setAdding(false)} onSaved={(id) => { s.setRunPlace(c.id, id); setAdding(false); }} />}
+      {stops.map((x, i) => {
+        const place = placeFor(x.shop, i);
+        if (isGeneric(x.shop) && !place) {
+          const saved = s.takeaways.filter((p) => p.cuisine === x.shop || x.shop === 'Takeaway');
+          return (
+            <div key={x.shop} className="col" style={{ gap: 6, background: '#16161b', borderRadius: 12, padding: 10 }}>
+              <span className="muted" style={{ fontSize: 12 }}>{x.shop === 'Takeaway' ? 'Where from?' : `Which ${x.shop} place?`}</span>
+              <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                {saved.slice(0, 5).map((p) => (
+                  <button key={p.id} className="chip" onClick={() => s.setStopPlace(c.id, x.shop, p.name)}>{p.name}</button>
+                ))}
+                <button className="chip" onClick={() => setPicking({ replace: x.shop, cuisine: x.shop })}>+ Type the name</button>
+              </div>
+            </div>
+          );
+        }
+        if (!place && !FOODISH.includes(x.shop)) return null;
+        return (
+          <div key={x.shop} className="col" style={{ gap: 6, background: '#16161b', borderRadius: 12, padding: 10 }}>
+            <div className="between">
+              <b style={{ fontSize: 14 }}>{x.shop}</b>
+              {(place?.phone || place?.menuUrl) && (
+                <button className="btn quiet" style={{ minHeight: 24, padding: 0, fontSize: 12 }} onClick={() => setEditing(place!)}>Edit</button>
+              )}
+            </div>
+            {place && (place.phone || place.menuUrl) ? (
+              <PlaceButtons place={place} />
+            ) : (
+              <button className="btn quiet" style={{ minHeight: 28, padding: 0, fontSize: 13, alignSelf: 'flex-start' }}
+                onClick={async () => setEditing(place ?? { id: await s.addTakeaway({ name: x.shop, cuisine: 'Takeaway' }), name: x.shop, cuisine: 'Takeaway', addedBy: s.me.id, at: Date.now() })}>
+                + Add their phone number or menu
+              </button>
+            )}
+          </div>
+        );
+      })}
+      {stops.length < 4 && (
+        <button className="chip" style={{ alignSelf: 'flex-start' }} onClick={() => setPicking({ cuisine: 'Takeaway' })}>
+          + {mineBuyer ? 'Another place' : `Ask ${s.person(c.createdBy).name} to add a place`}
+        </button>
+      )}
+      {picking && <PlacePicker cuisine={picking.cuisine} exclude={stops.map((x) => x.shop)} onClose={() => setPicking(null)} onPick={pick} />}
+      {editing && <PlaceSheet cuisine={editing.cuisine} place={editing} onClose={() => setEditing(null)} onSaved={() => setEditing(null)} />}
     </div>
   );
 }
 
-/** Save a place once: name, phone, menu link. */
+/** Fast-food chains count as food places too (so Domino's can get a phone number and menu). */
+const FOODISH = ['Maccas', 'GYG', 'KFC', 'Subway', "Hungry Jack's", "Domino's", 'Squeaky Wheel'];
+
+/** Pick a saved place, or type a new one. Phone and menu are optional. */
+export function PlacePicker({ cuisine, exclude = [], onClose, onPick }: { cuisine: string; exclude?: string[]; onClose: () => void; onPick: (name: string) => void }) {
+  const s = useStore();
+  const [name, setName] = useState('');
+  const [more, setMore] = useState(false);
+  const [phone, setPhone] = useState('');
+  const [menu, setMenu] = useState('');
+  const [busy, setBusy] = useState(false);
+  const saved = s.takeaways.filter((p) => !exclude.includes(p.name) && (cuisine === 'Takeaway' || p.cuisine === cuisine || p.cuisine === 'Takeaway'));
+  const fixUrl = (u: string) => (u.trim() && !/^https?:\/\//i.test(u.trim()) ? `https://${u.trim()}` : u.trim());
+
+  const save = async () => {
+    const n = name.trim();
+    if (!n) return;
+    setBusy(true);
+    try {
+      const existing = s.takeaways.find((p) => p.name.toLowerCase() === n.toLowerCase());
+      if (existing) {
+        if (phone.trim() || menu.trim()) await s.updateTakeaway(existing.id, { ...(phone.trim() ? { phone: phone.trim() } : {}), ...(menu.trim() ? { menuUrl: fixUrl(menu) } : {}) });
+        onPick(existing.name);
+      } else {
+        await s.addTakeaway({ name: n, cuisine, ...(phone.trim() ? { phone: phone.trim() } : {}), ...(menu.trim() ? { menuUrl: fixUrl(menu) } : {}) });
+        onPick(n);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Sheet onClose={onClose}>
+      <h2 style={{ fontSize: 20, margin: 0 }}>Where from?</h2>
+      {saved.length > 0 && (
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          {saved.slice(0, 8).map((p) => (
+            <button key={p.id} className="chip" onClick={() => onPick(p.name)}>{p.name}</button>
+          ))}
+        </div>
+      )}
+      <input className="input" placeholder="Type the place, e.g. Otter Thai" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !more && save()} />
+      {!more ? (
+        <button className="btn quiet" style={{ alignSelf: 'flex-start', minHeight: 28, padding: 0, fontSize: 13 }} onClick={() => setMore(true)}>+ Phone number or menu (optional)</button>
+      ) : (
+        <>
+          <input className="input" placeholder="Phone number" type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <input className="input" placeholder="Menu link (paste from their website)" inputMode="url" value={menu} onChange={(e) => setMenu(e.target.value)} />
+        </>
+      )}
+      <button className="btn primary" disabled={busy || !name.trim()} onClick={save}>Done</button>
+    </Sheet>
+  );
+}
+
+/** Add or change a saved place's phone and menu. */
 export function PlaceSheet({ cuisine, place, onClose, onSaved }: { cuisine: string; place?: Place; onClose: () => void; onSaved: (id: string) => void }) {
   const s = useStore();
   const [name, setName] = useState(place?.name ?? '');
@@ -79,7 +168,7 @@ export function PlaceSheet({ cuisine, place, onClose, onSaved }: { cuisine: stri
   const save = async () => {
     if (!name.trim()) return;
     setBusy(true);
-    const data = { name: name.trim(), phone: phone.trim() || undefined, menuUrl: fixUrl(menu) || undefined };
+    const data = { name: name.trim(), ...(phone.trim() ? { phone: phone.trim() } : {}), ...(menu.trim() ? { menuUrl: fixUrl(menu) } : {}) };
     try {
       if (place) {
         await s.updateTakeaway(place.id, data);
@@ -92,11 +181,11 @@ export function PlaceSheet({ cuisine, place, onClose, onSaved }: { cuisine: stri
 
   return (
     <Sheet onClose={onClose}>
-      <h2 style={{ fontSize: 20, margin: 0 }}>{place ? place.name : `Save a ${cuisine === 'Takeaway' ? 'takeaway' : cuisine} place`}</h2>
-      <span className="muted" style={{ fontSize: 14 }}>Saved for the whole group. Next time, just pick it.</span>
-      {!place && <input placeholder="Name, e.g. Chilli Basil" value={name} onChange={(e) => setName(e.target.value)} autoFocus />}
-      <input placeholder="Phone number" type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
-      <input placeholder="Menu link (paste from their website)" inputMode="url" value={menu} onChange={(e) => setMenu(e.target.value)} />
+      <h2 style={{ fontSize: 20, margin: 0 }}>{place ? place.name : 'Save a place'}</h2>
+      <span className="muted" style={{ fontSize: 14 }}>Saved for the whole group.</span>
+      {!place && <input className="input" placeholder="Name, e.g. Otter Thai" value={name} onChange={(e) => setName(e.target.value)} />}
+      <input className="input" placeholder="Phone number" type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoFocus={!!place} />
+      <input className="input" placeholder="Menu link (paste from their website)" inputMode="url" value={menu} onChange={(e) => setMenu(e.target.value)} />
       <button className="btn primary" disabled={busy || !name.trim()} onClick={save}>Save</button>
     </Sheet>
   );

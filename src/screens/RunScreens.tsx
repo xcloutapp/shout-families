@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FAST_FOOD, SHOPS, BOTTLE_SHOP } from '../seed';
-import { PlaceButtons } from './Takeaway';
+import { PlaceButtons, RunPlace, usePlaceFor } from './Takeaway';
 import { clock, timeLeft, useStore } from '../store';
 import type { RunCard } from '../types';
 import { Avatar, Icon, Sheet, TopBar, useToast } from '../ui';
@@ -11,7 +11,8 @@ export function AddOrder({ card: c }: { card: RunCard }) {
   const nav = useNavigate();
   const toast = useToast();
   const stops = c.stops.filter((x) => x.approved);
-  const [stop, setStop] = useState(stops[0].shop);
+  const [stopPicked, setStop] = useState(stops[0].shop);
+  const stop = stops.some((x) => x.shop === stopPicked) ? stopPicked : stops[stops.length - 1].shop;
   const usuals = s.state.usuals[s.me.id]?.[stop] ?? [];
   const [pick, setPick] = useState<string | null>(usuals[0] ?? null);
   const [typed, setTyped] = useState('');
@@ -23,7 +24,7 @@ export function AddOrder({ card: c }: { card: RunCard }) {
   const buyer = s.person(c.createdBy);
   const text = typed.trim() || pick || '';
   const isFood = FAST_FOOD.includes(stop);
-  const orderPlace = c.placeId ? s.takeaways.find((p) => p.id === c.placeId) : undefined;
+  const placeFor = usePlaceFor(c);
 
   if (c.locked) {
     return (
@@ -52,12 +53,10 @@ export function AddOrder({ card: c }: { card: RunCard }) {
         <button className="icon-btn" aria-label="Back" onClick={() => nav(-1)}><Icon name="back" size={18} stroke={2.5} /></button>
         <div className="col" style={{ gap: 2 }}>
           <span className="muted">{c.createdBy === s.me.id ? 'Your run' : `${buyer.name}'s going to`}</span>
-          <b style={{ fontSize: 16 }}>{orderPlace ? orderPlace.name : stops.map((x) => x.shop).join(' + ')}</b>
+          <b style={{ fontSize: 16 }}>{stops.map((x, i) => placeFor(x.shop, i)?.name ?? x.shop).join(' + ')}</b>
         </div>
       </div>
-      {orderPlace?.menuUrl && (
-        <a className="btn ghost" style={{ textDecoration: 'none' }} href={orderPlace.menuUrl} target="_blank" rel="noreferrer">See the menu</a>
-      )}
+      <RunPlace c={c} />
 
       {c.due && (
         <div className="between" style={{ background: '#2a1a12', borderRadius: 16, padding: '12px 14px' }}>
@@ -157,7 +156,7 @@ export function BuyerList({ card: c }: { card: RunCard }) {
   const ticked = c.orders.filter((o) => o.ticked).length;
   const people = [...new Set(c.orders.map((o) => o.personId))];
   const [amounts, setAmounts] = useState<Record<string, string>>({});
-  const place = c.placeId ? s.takeaways.find((p) => p.id === c.placeId) : undefined;
+  const placeFor = usePlaceFor(c);
 
   if (showAdd) return <AddOrderInline card={c} onBack={() => setShowAdd(false)} />;
 
@@ -169,7 +168,6 @@ export function BuyerList({ card: c }: { card: RunCard }) {
           {c.locked ? 'Locked in' : `Open · closes in ${timeLeft(c.due)}`}
         </span>
       </div>
-      {place && (place.phone || place.menuUrl) && <PlaceButtons place={place} big />}
       <div>
         <h1 style={{ fontSize: 30 }}>Your run</h1>
         <div className="muted">{stops.length} stop{stops.length > 1 ? 's' : ''} · {c.orders.length} order{c.orders.length === 1 ? '' : 's'}{c.locked ? ` · ${ticked} of ${c.orders.length} ticked` : ''}</div>
@@ -193,6 +191,10 @@ export function BuyerList({ card: c }: { card: RunCard }) {
               <span className="tag" style={{ color: 'var(--accent)' }}>Stop {i + 1} · {st.shop}</span>
               <span className="muted">{st.addedBy !== c.createdBy ? `added by ${s.person(st.addedBy).name}` : `${orders.length} order${orders.length === 1 ? '' : 's'}`}</span>
             </div>
+            {(() => {
+              const p = placeFor(st.shop, i);
+              return p && (p.phone || p.menuUrl) ? <div style={{ paddingBottom: 8 }}><PlaceButtons place={p} /></div> : null;
+            })()}
             {orders.length === 0 && <div className="order-row muted">Nothing yet</div>}
             {orders.map((o) => (
               <div key={o.id} className="order-row">

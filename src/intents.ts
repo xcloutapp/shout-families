@@ -14,7 +14,7 @@ export const SHOP_ALIASES: [RegExp, string][] = [
   [/\baldi\b/i, 'Aldi'],
   [/\bsubway\b/i, 'Subway'],
   [/\bhungry ?jack'?s?\b/i, "Hungry Jack's"],
-  [/\b(domino'?s|dom'?s)\b/i, "Domino's"],
+  [/\b(domino'?s|dominoe?s|dom'?s)\b/i, "Domino's"],
   [/\b(squeaky wheel)\b/i, 'Squeaky Wheel'],
   // Food types (a saved place can be picked on the run)
   [/\bthai\b/i, 'Thai'],
