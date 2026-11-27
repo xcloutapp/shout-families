@@ -35,6 +35,7 @@ export interface PlaceRef {
   id: string;
   name: string;
   cuisine: string;
+  aliases?: string[];
 }
 
 /** The first shop, food type or saved place mentioned in the text. */
@@ -44,7 +45,9 @@ export function findShopAt(text: string, places: PlaceRef[] = []): { shop: strin
     const m = re.exec(text);
     if (m && (!best || m.index < best.index || (m.index === best.index && placeId))) best = { shop, placeId, index: m.index, end: m.index + m[0].length };
   };
-  for (const p of places) consider(new RegExp(`\\b${p.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'), p.cuisine, p.id);
+  const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Longest names first, so "Otter Thai" wins over "Thai".
+  for (const p of places) for (const n of [p.name, ...(p.aliases ?? [])].sort((a, b) => b.length - a.length)) consider(new RegExp(`\\b${esc(n)}\\b`, 'i'), p.name, p.id);
   for (const [re, name] of SHOP_ALIASES) consider(new RegExp(re.source, 'i'), name);
   return best;
 }

@@ -76,6 +76,7 @@ export interface Place {
   cuisine: string;
   phone?: string;
   menuUrl?: string;
+  aliases?: string[];
   addedBy: PersonId;
   at: number;
 }

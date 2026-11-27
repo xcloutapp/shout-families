@@ -420,7 +420,7 @@ export function useStore() {
     takeaways: [
       ...sess.takeaways,
       ...DIRECTORY.filter((d) => !sess.takeaways.some((t) => t.name.toLowerCase() === d.name.toLowerCase())).map(
-        (d): Place => ({ id: `dir:${d.name}`, name: d.name, cuisine: d.cuisine, phone: d.phone, menuUrl: d.menuUrl, addedBy: '', at: 0 }),
+        (d): Place => ({ id: `dir:${d.name}`, name: d.name, cuisine: d.cuisine, phone: d.phone, menuUrl: d.menuUrl, aliases: d.aliases, addedBy: '', at: 0 }),
       ),
     ],
     /** Add items to a shop's list, or straight into an open run there. Returns where they went. */

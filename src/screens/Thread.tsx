@@ -195,11 +195,11 @@ function Bubble({ m, prev, cid, onHold, toast, latestList }: { m: Message; prev?
         {!mine && <span style={{ visibility: showName ? 'visible' : 'hidden' }}><Avatar person={author} size={28} /></span>}
         <div className="col" style={{ gap: 6, alignItems: mine ? 'flex-end' : 'flex-start', minWidth: 0 }}>
           {(m.text || m.tokens) && (
-            <div {...press} style={{ userSelect: 'none', WebkitUserSelect: 'none', background: mine ? 'var(--accent)' : '#26262e', color: mine ? 'var(--accent-ink)' : 'var(--text)', borderRadius: mine ? '18px 18px 6px 18px' : '18px 18px 18px 6px', padding: '9px 13px', fontSize: 15, lineHeight: 1.35, fontWeight: mine ? 500 : 400, display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center', wordBreak: 'break-word' }}>
+            <div {...press} style={{ userSelect: 'none', WebkitUserSelect: 'none', background: mine ? 'var(--imsg-blue)' : 'var(--imsg-grey)', color: mine ? '#fff' : 'var(--text)', borderRadius: mine ? '18px 18px 6px 18px' : '18px 18px 18px 6px', padding: '8px 13px', fontSize: 16, lineHeight: 1.3, fontWeight: 400, display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center', wordBreak: 'break-word' }}>
               <span>{m.text}</span>
               {(['who', 'where', 'when'] as const).map((k) =>
                 m.tokens?.[k] ? (
-                  <button key={k} onClick={() => mine && setEditing(k)} style={{ border: 'none', background: mine ? 'rgba(26,14,7,.16)' : '#33333c', color: 'inherit', borderRadius: 8, padding: '2px 7px', fontWeight: 700, fontSize: 14, cursor: mine ? 'pointer' : 'default' }}>
+                  <button key={k} onClick={() => mine && setEditing(k)} style={{ border: 'none', background: mine ? 'rgba(255,255,255,.22)' : '#3a3a3e', color: 'inherit', borderRadius: 8, padding: '2px 7px', fontWeight: 700, fontSize: 14, cursor: mine ? 'pointer' : 'default' }}>
                     {k === 'where' ? `at ${m.tokens[k]}` : k === 'when' ? `${m.tokens[k]}` : m.tokens[k]}
                   </button>
                 ) : null,
@@ -710,7 +710,7 @@ function Composer({ chat, toast }: { chat: Chat; toast: (s: string) => void }) {
           {(['who', 'where', 'when'] as const).map((k) => tokens[k] ? <span key={k} style={{ background: k === 'when' ? 'var(--accent)' : '#26262e', color: k === 'when' ? 'var(--accent-ink)' : 'var(--text)', borderRadius: 8, padding: '1px 6px', fontSize: 13, fontWeight: 700 }}>{tokens[k]}</span> : null)}
         </div>
         {text.trim() ? (
-          <button className="icon-btn" aria-label="Send" style={{ width: 40, height: 40, background: 'var(--accent)', color: 'var(--accent-ink)' }} onClick={() => send()}><Icon name="send" size={18} stroke={2.6} /></button>
+          <button className="icon-btn" aria-label="Send" style={{ width: 40, height: 40, background: 'var(--imsg-blue)', color: '#fff' }} onClick={() => send()}><Icon name="send" size={18} stroke={2.6} /></button>
         ) : (
           <button className="icon-btn" aria-label="Send a photo" style={{ width: 40, height: 40 }} onClick={() => fileRef.current?.click()}><Icon name="camera" size={20} /></button>
         )}

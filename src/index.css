@@ -18,6 +18,9 @@
   --purple: #b3a6ff;
   --yellow: #ffd27a;
   color-scheme: dark;
+  /* Message bubbles match iMessage so the chat feels familiar. */
+  --imsg-blue: #0A84FF;
+  --imsg-grey: #26252A;
   --tabbar-h: calc(67px + env(safe-area-inset-bottom));
 }
 
