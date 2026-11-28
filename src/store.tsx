@@ -311,11 +311,11 @@ export function useStore() {
     },
     clearCard: (cid: string, mid: string) => updateDoc(doc(msgCol(cid), mid), { cardId: deleteField(), dismissed: true }),
     guestCol: (token: string) => collection(db, 'shares', token, 'guestOrders'),
-    addOrderFor(cardId: string, personId: PersonId, stop: string, text: string) {
+    addOrderFor(cardId: string, personId: PersonId, stop: string, text: string, note?: string) {
       return updateCard<RunCard>(cardId, (c) => ({
         ...c,
         notMe: c.notMe.filter((p) => p !== personId),
-        orders: [...c.orders, { id: uid(), personId, stop, text, ticked: false, at: Date.now() }],
+        orders: [...c.orders, { id: uid(), personId, stop, text, ...(note ? { note } : {}), ticked: false, at: Date.now() }],
       }));
     },
     react: (cid: string, mid: string, val: 'good' | 'nah' | null) =>
@@ -630,6 +630,16 @@ export function useStore() {
       const placeNames = card.stops.filter((x) => x.approved).map((x) => x.shop).join(' and ');
       const orderers = [...new Set(card.orders.map((o) => o.personId))].filter((id) => id !== meId && !id.startsWith('guest:'));
       if (card.chatId) await sendMessage(card.chatId, { text: `Ordered from ${placeNames} ✓`, notifyOnly: orderers });
+    },
+    /** Nudge the people who haven't ordered or said "not me" yet. */
+    async remindRun(cardId: string) {
+      const card = sess.cards.find((c) => c.id === cardId) as RunCard | undefined;
+      if (!card?.chatId) return;
+      const answered = new Set([...card.orders.map((o) => o.personId), ...card.notMe, card.createdBy]);
+      const waiting = card.forIds.filter((id) => !answered.has(id));
+      const names = card.stops.filter((x) => x.approved).map((x) => x.shop).join(' and ');
+      await sendMessage(card.chatId, { text: `Ordering from ${names} soon. Add yours if you want something`, cardId, notifyOnly: waiting });
+      updateCard<RunCard>(cardId, (c) => ({ ...c, remindedAt: Date.now() }));
     },
     tickMany(cardId: string, orderIds: string[], ticked: boolean) {
       updateCard<RunCard>(cardId, (c) => ({ ...c, orders: c.orders.map((o) => (orderIds.includes(o.id) ? { ...o, ticked, missing: undefined } : o)) }));

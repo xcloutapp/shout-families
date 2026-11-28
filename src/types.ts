@@ -69,6 +69,8 @@ export interface RunCard extends CardBase {
   calledAt?: number;
   /** The buyer tapped Ordered. */
   orderedAt?: number;
+  /** The buyer nudged people who hadn't ordered. */
+  remindedAt?: number;
 }
 
 /** A saved takeaway place: tap Menu or Call from a run. */

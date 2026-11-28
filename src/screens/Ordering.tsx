@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { SUPERMARKETS } from '../seed';
 import { useStore } from '../store';
@@ -43,6 +43,53 @@ function useScreenAwake() {
   }, []);
 }
 
+/** Add an order straight from the ordering screen: your own, or for someone who told you in person. */
+function AddOrder({ c, stop }: { c: RunCard; stop: string }) {
+  const s = useStore();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [note, setNote] = useState('');
+  const people = [s.me.id, ...c.forIds.filter((id) => id !== s.me.id)];
+  const [who, setWho] = useState(s.me.id);
+  const usuals: string[] = (s.state.usuals[s.me.id]?.[stop] ?? []).slice(0, 4);
+  const add = async (t = text) => {
+    if (!t.trim()) return;
+    await s.addOrderFor(c.id, who, stop, t.trim(), note.trim() || undefined);
+    setText('');
+    setNote('');
+  };
+  if (!open) {
+    return (
+      <button className="btn ghost" style={{ marginTop: 12, justifyContent: 'flex-start', gap: 8 }} onClick={() => setOpen(true)}>
+        <Icon name="plus" size={18} /> Add an order
+      </button>
+    );
+  }
+  return (
+    <div className="col" style={{ gap: 8, marginTop: 12, background: '#16161b', borderRadius: 16, padding: 12 }}>
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12, color: '#8e8e96' }}>For</span>
+        {people.map((id) => (
+          <button key={id} className="chip" style={who === id ? { background: 'var(--text)', color: '#000' } : undefined} onClick={() => setWho(id)}>
+            {id === s.me.id ? 'Me' : s.person(id).name}
+          </button>
+        ))}
+      </div>
+      {who === s.me.id && usuals.length > 0 && (
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          {usuals.map((u) => <button key={u} className="chip" onClick={() => add(u)}>+ {u}</button>)}
+        </div>
+      )}
+      <input className="input" placeholder="What do they want?" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} autoFocus />
+      <input className="input" placeholder="Note (optional), e.g. no chilli" value={note} onChange={(e) => setNote(e.target.value)} />
+      <div className="row" style={{ gap: 8 }}>
+        <button className="btn primary grow" disabled={!text.trim()} onClick={() => add()}>Add</button>
+        <button className="btn ghost" onClick={() => setOpen(false)}>Done</button>
+      </div>
+    </div>
+  );
+}
+
 /** Full screen for the person placing the order: big, combined, tick as you say it. */
 export function Ordering() {
   const { id } = useParams();
@@ -56,6 +103,9 @@ export function Ordering() {
   const stops = c.stops.filter((x) => x.approved);
   const isShop = stops.some((x) => SUPERMARKETS.includes(x.shop));
   const orderers = [...new Set(c.orders.map((o) => o.personId))].filter((p) => p !== s.me.id && !p.startsWith('guest:')).map((p) => s.person(p).name);
+  const answered = new Set([...c.orders.map((o) => o.personId), ...c.notMe, c.createdBy]);
+  const waitingOn = c.forIds.filter((id) => !answered.has(id)).map((id) => s.person(id).name);
+  const remindedRecently = !!c.remindedAt && Date.now() - c.remindedAt < 10 * 60000;
   const who = (os: RunOrder[]) => [...new Set(os.map((o) => (o.personId === s.me.id ? 'You' : o.personId.startsWith('guest:') ? o.personId.slice(6) : s.person(o.personId).name)))].join(', ');
 
   const LineRow = ({ l, late }: { l: Line; late?: boolean }) => {
@@ -108,7 +158,8 @@ export function Ordering() {
             )}
             <span style={{ fontSize: 12, color: '#8e8e96', marginTop: 4 }}>{mine.length} order{mine.length === 1 ? '' : 's'} · tap each as you {isShop ? 'get it' : 'say it'}</span>
             {onTime.map((l) => <LineRow key={l.key} l={l} />)}
-            {onTime.length === 0 && late.length === 0 && <span className="muted" style={{ padding: '14px 0' }}>Nothing for here yet</span>}
+            {onTime.length === 0 && late.length === 0 && <span className="muted" style={{ padding: '14px 0 0' }}>No orders yet. Add yours below, or remind everyone.</span>}
+            {!c.orderedAt && <AddOrder c={c} stop={st.shop} />}
             {late.length > 0 && (
               <>
                 <span style={{ fontSize: 12, color: '#ff8a7a', marginTop: 16 }}>{c.calledAt ? 'Added after you called' : 'Added after you locked in'}</span>
@@ -119,12 +170,21 @@ export function Ordering() {
         );
       })}
 
+      {!c.orderedAt && waitingOn.length > 0 && (
+        <div className="row" style={{ gap: 10, marginTop: 14, padding: '10px 12px', background: '#16161b', borderRadius: 14 }}>
+          <span className="grow" style={{ fontSize: 14, color: '#c7c7cc' }}>Waiting on {waitingOn.join(', ')}</span>
+          <button className="btn ghost" style={{ minHeight: 34, fontSize: 13 }} disabled={remindedRecently} onClick={() => s.remindRun(c.id)}>
+            {remindedRecently ? 'Reminded' : 'Remind them'}
+          </button>
+        </div>
+      )}
+
       <div style={{ position: 'fixed', left: 0, right: 0, bottom: 'calc(var(--tabbar-h) + 0px)', padding: '12px 20px', background: 'linear-gradient(transparent, var(--bg) 30%)' }}>
         <div style={{ maxWidth: 440, margin: '0 auto' }} className="col">
           {c.orderedAt ? (
             <button className="btn ghost big" onClick={() => nav(`/card/${c.id}`)}>Add costs</button>
           ) : (
-            <button className="btn primary big" onClick={async () => { await s.markOrdered(c.id); nav(-1); }}>
+            <button className="btn primary big" disabled={c.orders.length === 0} onClick={async () => { await s.markOrdered(c.id); nav(-1); }}>
               {isShop ? 'Got everything' : 'Ordered'} <Icon name="check" size={18} stroke={2.6} />
             </button>
           )}
