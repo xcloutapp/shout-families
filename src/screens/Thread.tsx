@@ -89,8 +89,47 @@ export default function Thread() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cid]);
 
+  // Stay at the newest message, including while photos and reel previews load in and grow the list,
+  // unless you've scrolled up to read something.
+  const listRef = useRef<HTMLDivElement>(null);
+  const stick = useRef(true);
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: 'end' });
+    stick.current = true;
+  }, [cid]);
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const toBottom = () => {
+      if (stick.current) el.scrollTop = el.scrollHeight;
+    };
+    const onScroll = () => {
+      stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    const ro = new ResizeObserver(toBottom);
+    Array.from(el.children).forEach((c) => ro.observe(c));
+    ro.observe(el);
+    const mo = new MutationObserver(() => {
+      Array.from(el.children).forEach((c) => ro.observe(c));
+      toBottom();
+    });
+    mo.observe(el, { childList: true });
+    // Images finishing loading don't always change layout size straight away.
+    const onLoad = () => toBottom();
+    el.addEventListener('load', onLoad, true);
+    toBottom();
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      el.removeEventListener('load', onLoad, true);
+      ro.disconnect();
+      mo.disconnect();
+    };
+  });
+  useEffect(() => {
+    if (msgs[msgs.length - 1]?.authorId === s.me.id) stick.current = true;
+    const el = listRef.current;
+    if (el && stick.current) el.scrollTop = el.scrollHeight;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [msgs.length]);
 
   if (!chat) {
@@ -128,7 +167,7 @@ export default function Thread() {
         </div>
       )}
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 12px 4px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div ref={listRef} style={{ flex: 1, overflowY: 'auto', padding: '12px 12px 4px', display: 'flex', flexDirection: 'column', gap: 8, overscrollBehavior: 'contain' }}>
         {msgs.length === 0 && (
           <div className="card flat" style={{ alignItems: 'center', textAlign: 'center', margin: '20px 0' }}>
             <b>{chat.kind === 'fun' ? 'Share reels, TikToks and photos here' : 'Say something to get started'}</b>
