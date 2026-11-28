@@ -343,7 +343,7 @@ export function DoneCaption({ c }: { c: Card }) {
   const tick = <Icon name="check" size={11} stroke={3} />;
   let text = '';
   if (c.kind === 'job') text = `Done by ${c.claimedBy === s.me.id ? 'you' : s.person(c.claimedBy ?? c.createdBy).name}${c.doneAt ? ` · ${hm(c.doneAt)}` : ''}`;
-  else if (c.kind === 'run') text = `${c.orders.length} order${c.orders.length === 1 ? '' : 's'} · ${c.status === 'done' ? 'finished' : 'ordered'}`;
+  else if (c.kind === 'run') text = `${c.stops.filter((x) => x.approved).map((x) => x.shop).join(' + ')} run · ${c.orders.length} order${c.orders.length === 1 ? '' : 's'} · ${c.status === 'done' ? 'finished' : c.orderedAt ? 'ordered' : 'closed'}`;
   else text = 'Dinner sorted';
   return (
     <span style={{ fontSize: 12, color: '#8e8e96', display: 'flex', alignItems: 'center', gap: 4, padding: '0 6px' }}>
