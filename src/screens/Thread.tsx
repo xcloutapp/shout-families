@@ -180,7 +180,7 @@ export default function Thread() {
           </div>
         )}
         {msgs.map((m, i) => (
-          <Bubble key={m.id} m={m} prev={msgs[i - 1]} cid={cid} onHold={() => setActionsFor(m)} toast={toast.show} latestList={!!m.listShop && !msgs.slice(i + 1).some((x) => x.listShop === m.listShop)} latestCard={!!m.cardId && !msgs.slice(i + 1).some((x) => x.cardId === m.cardId)} chatKind={chat.kind} />
+          <Bubble key={m.id} m={m} prev={msgs[i - 1]} next={msgs[i + 1]} cid={cid} onHold={() => setActionsFor(m)} toast={toast.show} latestList={!!m.listShop && !msgs.slice(i + 1).some((x) => x.listShop === m.listShop)} latestCard={!!m.cardId && !msgs.slice(i + 1).some((x) => x.cardId === m.cardId)} chatKind={chat.kind} />
         ))}
         <div ref={endRef} />
       </div>
@@ -217,7 +217,7 @@ function useLongPress(cb: () => void) {
   };
 }
 
-function Bubble({ m, prev, cid, onHold, toast, latestList, latestCard, chatKind }: { m: Message; prev?: Message; cid: string; onHold: () => void; toast: (s: string) => void; latestList?: boolean; latestCard?: boolean; chatKind?: Chat['kind'] }) {
+function Bubble({ m, prev, next, cid, onHold, toast, latestList, latestCard, chatKind }: { m: Message; prev?: Message; next?: Message; cid: string; onHold: () => void; toast: (s: string) => void; latestList?: boolean; latestCard?: boolean; chatKind?: Chat['kind'] }) {
   const s = useStore();
   const mine = m.authorId === s.me.id;
   const author = s.person(m.authorId);
@@ -225,6 +225,8 @@ function Bubble({ m, prev, cid, onHold, toast, latestList, latestCard, chatKind 
   const press = useLongPress(onHold);
   const showTime = !prev || m.createdAt - prev.createdAt > 30 * 60000;
   const showName = !mine && (!prev || prev.authorId !== m.authorId || showTime);
+  // Like Messages: the sender's circle sits beside the last message in their run.
+  const showFace = !mine && (!next || next.authorId !== m.authorId || next.createdAt - m.createdAt > 30 * 60000);
   const [editing, setEditing] = useState<keyof Tokens | null>(null);
   const replies = Object.entries(m.replies ?? {});
   const [open, setOpen] = useState(false);
@@ -242,9 +244,9 @@ function Bubble({ m, prev, cid, onHold, toast, latestList, latestCard, chatKind 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: mine ? 'flex-end' : 'flex-start', gap: 4 }}>
       {showTime && <div style={{ alignSelf: 'center', fontSize: 11, color: '#8a8a95', margin: '6px 0' }}>{new Date(m.createdAt).toLocaleString('en-AU', { weekday: 'short', hour: 'numeric', minute: '2-digit' })}</div>}
-      {showName && <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 36 }}>{author.name}</span>}
+      {showName && <span style={{ fontSize: 12, color: '#8e8e96', marginLeft: 52 }}>{author.name}</span>}
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', maxWidth: '86%', flexDirection: mine ? 'row-reverse' : 'row' }}>
-        {!mine && <span style={{ visibility: showName ? 'visible' : 'hidden' }}><Avatar person={author} size={28} /></span>}
+        {!mine && <span style={{ visibility: showFace ? 'visible' : 'hidden', flexShrink: 0 }}><Avatar person={author} size={36} /></span>}
         <div className="col" style={{ gap: 6, alignItems: mine ? 'flex-end' : 'flex-start', minWidth: 0 }}>
           {(m.text || m.tokens) && (
             <div {...press} onClick={() => finished && setOpen((x) => !x)} style={{ userSelect: 'none', WebkitUserSelect: 'none', background: mine ? 'var(--imsg-blue)' : 'var(--imsg-grey)', color: mine ? '#fff' : 'var(--text)', borderRadius: mine ? '18px 18px 6px 18px' : '18px 18px 18px 6px', padding: '8px 13px', fontSize: 16, lineHeight: 1.3, fontWeight: 400, display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center', wordBreak: 'break-word' }}>
