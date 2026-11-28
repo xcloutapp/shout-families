@@ -155,3 +155,18 @@ export function toIcs(items: { title: string; day: string; start?: string; end?:
   lines.push('END:VCALENDAR');
   return lines.join('\r\n');
 }
+
+const DAY = "(?:(?:on|this|next)\\s+)?(?:mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)(?:day|nesday|sday|urday|rsday)?(?:\\s+(?:the\\s+)?\\d{1,2}(?:st|nd|rd|th))?|today|tonight|tomorrow|tmrw|this weekend|the weekend";
+const TIME = "(?:\\s+\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)?\\s*(?:-|–|to|till|until)\\s*\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)|\\s+(?:at|from|@)?\\s*\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)(?:\\s*(?:-|–|to|till|until)\\s*\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)?)?|\\s+(?:at|from|@)\\s*\\d{1,2}(?::\\d{2})?(?:\\s*(?:-|–|to|till|until)\\s*\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)?)?)?";
+const SPAN_RE = new RegExp(`\\b(?:${DAY})${TIME}`, 'gi');
+
+/** Finds day/time phrases in a message: "Thursday at 6am", "tomorrow", "Sat 5-10pm". */
+export function findDateSpans(text: string): { start: number; end: number }[] {
+  const out: { start: number; end: number }[] = [];
+  for (const m of text.matchAll(SPAN_RE)) {
+    const start = m.index ?? 0;
+    out.push({ start, end: start + m[0].length });
+  }
+  return out;
+}
+

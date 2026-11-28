@@ -91,7 +91,8 @@ export const notifyMessage = onDocumentCreated('groups/{gid}/chats/{cid}/message
   if (!body) return;
 
   const inGroup = new Set(group.memberIds ?? []);
-  const to = (chat.memberIds ?? []).filter((id) => id !== m.authorId && inGroup.has(id));
+  let to = (chat.memberIds ?? []).filter((id) => id !== m.authorId && inGroup.has(id));
+  if (Array.isArray(m.notifyOnly)) to = to.filter((id) => m.notifyOnly.includes(id));
   if (!to.length) return;
 
   // Title is what the chat is called on the recipient's own chat list.

@@ -3,12 +3,13 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { deleteDoc, doc, getDoc, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from '../firebase';
 import { detect, detectLink, phraseKey } from '../intents';
-import { dayKey, describeDays, detectEvent } from '../dates';
+import { DateSheet, WithDates } from './Dates';
 import { BOTTLE_SHOP, SHOPS, SUPERMARKETS } from '../seed';
-import { timeLeft, useStore } from '../store';
+import { clock, timeLeft, useStore } from '../store';
 import type { Card, Chat, DinnerCard, JobCard, Message, RunCard, Tokens } from '../types';
 import { Avatar, Icon, Sheet, useToast } from '../ui';
-import { PeopleSheet } from './Chats';
+import { PeopleSheet, chatTitle, chatTopic } from './Chats';
+import { JobsSheet } from './Jobs';
 import { ListInline, RunPlace, lateLabel, usePlaceFor } from './Takeaway';
 
 type Store = ReturnType<typeof useStore>;
@@ -76,6 +77,7 @@ export default function Thread() {
   const chat = s.chatById(cid);
   const [msgs, setMsgs] = useState<Message[]>([]);
   const [people, setPeople] = useState(false);
+  const [jobs, setJobs] = useState(false);
   const [actionsFor, setActionsFor] = useState<Message | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
@@ -100,9 +102,10 @@ export default function Thread() {
     );
   }
 
-  const members = chat.memberIds.filter((id) => id !== s.me.id).map(s.person);
-  const title = chat.name || members.map((m) => m.name).join(', ');
-  const subtitle = chat.kind === 'fun' ? 'Reels, TikToks and photos' : chat.everyone ? 'Everyone' : `You, ${members.map((m) => m.name).join(', ')}`;
+  const title = chatTitle(s, chat);
+  const topic = chatTopic(chat);
+  const openJobs = s.cards.filter((c) => c.kind === 'job' && c.status !== 'done' && (chat.everyone || c.chatId === chat.id)).length;
+  const subtitle = [topic, openJobs ? `${openJobs} job${openJobs === 1 ? '' : 's'} open` : 'Jobs and people'].filter(Boolean).join(' · ');
 
   // Fun chat: my hit rate this week.
   const weekAgo = Date.now() - 7 * 86400000;
@@ -110,13 +113,13 @@ export default function Thread() {
   const liked = myLinks.filter((m) => Object.values(m.reactions ?? {}).includes('good')).length;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - var(--tabbar-h) - env(safe-area-inset-top))' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - var(--tabbar-h) - env(safe-area-inset-top) - var(--obar-h, 0px))' }}>
       <div style={{ padding: '10px 12px', borderBottom: '1px solid #1f1f26', display: 'flex', alignItems: 'center', gap: 10 }}>
         <button className="icon-btn" aria-label="Back to chats" onClick={() => nav('/')}><Icon name="back" size={18} stroke={2.5} /></button>
-        <div className="col grow" style={{ gap: 0, minWidth: 0 }}>
-          <b className="display" style={{ fontSize: 19, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</b>
-          <span className="muted" style={{ fontSize: 12 }}>{subtitle}</span>
-        </div>
+        <button className="col grow" onClick={() => setJobs(true)} style={{ gap: 0, minWidth: 0, background: 'none', border: 'none', padding: 0, alignItems: 'center', color: 'var(--text)' }}>
+          <b style={{ fontSize: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{title} <span style={{ color: '#8e8e96', fontWeight: 400 }}>›</span></b>
+          <span style={{ fontSize: 12, color: '#8e8e96' }}>{subtitle}</span>
+        </button>
         <button className="icon-btn" aria-label="Where's everyone" onClick={() => setPeople(true)}><Icon name="people" size={20} /></button>
       </div>
       {chat.kind === 'fun' && myLinks.length > 0 && (
@@ -133,13 +136,14 @@ export default function Thread() {
           </div>
         )}
         {msgs.map((m, i) => (
-          <Bubble key={m.id} m={m} prev={msgs[i - 1]} cid={cid} onHold={() => setActionsFor(m)} toast={toast.show} latestList={!!m.listShop && !msgs.slice(i + 1).some((x) => x.listShop === m.listShop)} />
+          <Bubble key={m.id} m={m} prev={msgs[i - 1]} cid={cid} onHold={() => setActionsFor(m)} toast={toast.show} latestList={!!m.listShop && !msgs.slice(i + 1).some((x) => x.listShop === m.listShop)} latestCard={!!m.cardId && !msgs.slice(i + 1).some((x) => x.cardId === m.cardId)} chatKind={chat.kind} />
         ))}
         <div ref={endRef} />
       </div>
 
       <Composer chat={chat} toast={toast.show} />
       {people && <PeopleSheet onClose={() => setPeople(false)} />}
+      {jobs && <JobsSheet chat={chat} onClose={() => setJobs(false)} toast={toast.show} />}
       {actionsFor && <QuickActions m={actionsFor} cid={cid} onClose={() => setActionsFor(null)} toast={toast.show} />}
       {toast.node}
     </div>
@@ -169,7 +173,7 @@ function useLongPress(cb: () => void) {
   };
 }
 
-function Bubble({ m, prev, cid, onHold, toast, latestList }: { m: Message; prev?: Message; cid: string; onHold: () => void; toast: (s: string) => void; latestList?: boolean }) {
+function Bubble({ m, prev, cid, onHold, toast, latestList, latestCard, chatKind }: { m: Message; prev?: Message; cid: string; onHold: () => void; toast: (s: string) => void; latestList?: boolean; latestCard?: boolean; chatKind?: Chat['kind'] }) {
   const s = useStore();
   const mine = m.authorId === s.me.id;
   const author = s.person(m.authorId);
@@ -179,6 +183,10 @@ function Bubble({ m, prev, cid, onHold, toast, latestList }: { m: Message; prev?
   const showName = !mine && (!prev || prev.authorId !== m.authorId || showTime);
   const [editing, setEditing] = useState<keyof Tokens | null>(null);
   const replies = Object.entries(m.replies ?? {});
+  const [open, setOpen] = useState(false);
+  const [dateFor, setDateFor] = useState<string | null>(null);
+  const finished = card ? cardFinished(card) : false;
+  const showStrip = !!card && latestCard && (!finished || open);
 
   const undo = async () => {
     if (!card) return;
@@ -195,8 +203,8 @@ function Bubble({ m, prev, cid, onHold, toast, latestList }: { m: Message; prev?
         {!mine && <span style={{ visibility: showName ? 'visible' : 'hidden' }}><Avatar person={author} size={28} /></span>}
         <div className="col" style={{ gap: 6, alignItems: mine ? 'flex-end' : 'flex-start', minWidth: 0 }}>
           {(m.text || m.tokens) && (
-            <div {...press} style={{ userSelect: 'none', WebkitUserSelect: 'none', background: mine ? 'var(--imsg-blue)' : 'var(--imsg-grey)', color: mine ? '#fff' : 'var(--text)', borderRadius: mine ? '18px 18px 6px 18px' : '18px 18px 18px 6px', padding: '8px 13px', fontSize: 16, lineHeight: 1.3, fontWeight: 400, display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center', wordBreak: 'break-word' }}>
-              <span>{m.text}</span>
+            <div {...press} onClick={() => finished && setOpen((x) => !x)} style={{ userSelect: 'none', WebkitUserSelect: 'none', background: mine ? 'var(--imsg-blue)' : 'var(--imsg-grey)', color: mine ? '#fff' : 'var(--text)', borderRadius: mine ? '18px 18px 6px 18px' : '18px 18px 18px 6px', padding: '8px 13px', fontSize: 16, lineHeight: 1.3, fontWeight: 400, display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center', wordBreak: 'break-word' }}>
+              <span>{chatKind !== 'fun' ? <WithDates text={m.text ?? ''} onDate={setDateFor} /> : m.text}</span>
               {(['who', 'where', 'when'] as const).map((k) =>
                 m.tokens?.[k] ? (
                   <button key={k} onClick={() => mine && setEditing(k)} style={{ border: 'none', background: mine ? 'rgba(255,255,255,.22)' : '#3a3a3e', color: 'inherit', borderRadius: 8, padding: '2px 7px', fontWeight: 700, fontSize: 14, cursor: mine ? 'pointer' : 'default' }}>
@@ -208,21 +216,13 @@ function Bubble({ m, prev, cid, onHold, toast, latestList }: { m: Message; prev?
           )}
           {m.photoId && <Photo gid={s.group.id} id={m.photoId} press={press} />}
           {m.link && <div {...press}><LinkCard m={m} cid={cid} /></div>}
-          {card && <CardInline card={card} toast={toast} />}
+          {showStrip && <CardInline card={card!} toast={toast} />}
+          {card && latestCard && finished && !open && <DoneCaption c={card} />}
+          {m.eventId && <span style={{ fontSize: 12, color: '#8e8e96', display: 'flex', alignItems: 'center', gap: 4, padding: '0 6px' }}><span style={{ color: '#34c759', display: 'flex' }}><Icon name="calendar" size={12} /></span>On the calendar</span>}
           {m.listShop && <ListInline shop={m.listShop} latest={!!latestList} />}
-          {m.note && (
-            <span style={{ fontSize: 12, color: '#ffb38a', fontWeight: 600 }}>
-              {m.note}
-              {mine && m.eventId && (
-                <button className="btn quiet" style={{ minHeight: 24, padding: '0 0 0 8px', fontSize: 12 }} onClick={async () => {
-                  await s.deleteEvent(m.eventId!);
-                  await s.updateMessage(cid, m.id, { note: 'Removed from the calendar', eventId: '' });
-                }}>Undo</button>
-              )}
-            </span>
-          )}
+          {m.note && !m.note.startsWith('Added to the calendar') && <span style={{ fontSize: 12, color: '#8e8e96', padding: '0 6px' }}>{m.note}</span>}
           {mine && card && Date.now() - m.createdAt < 10 * 60000 && card.status === 'open' && (
-            <button className="btn quiet" style={{ minHeight: 28, padding: 0, fontSize: 12 }} onClick={undo}>Not a {card.kind === 'job' ? ((card as JobCard).lift ? 'lift' : 'job') : card.kind}? Undo</button>
+            <button className="btn quiet" style={{ minHeight: 22, padding: '0 6px', fontSize: 11, color: '#6f6f77' }} onClick={undo}>Not a {card.kind === 'job' ? ((card as JobCard).lift ? 'lift' : 'job') : card.kind}? Undo</button>
           )}
           {replies.length > 0 && (
             <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
@@ -233,6 +233,7 @@ function Bubble({ m, prev, cid, onHold, toast, latestList }: { m: Message; prev?
           )}
         </div>
       </div>
+      {dateFor && <DateSheet m={m} cid={cid} phrase={dateFor} onClose={() => setDateFor(null)} toast={toast} />}
       {editing && (
         <Sheet onClose={() => setEditing(null)}>
           <h2 style={{ fontSize: 20 }}>Change {editing}</h2>
@@ -324,12 +325,36 @@ function LinkCard({ m, cid }: { m: Message; cid: string }) {
 
 /* ---------- cards shown inside the chat ---------- */
 
+const STRIP: React.CSSProperties = { width: 260, maxWidth: '100%', background: '#1b1b20', borderRadius: 14, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6, boxSizing: 'border-box' };
+const SBTN: React.CSSProperties = { minHeight: 32, fontSize: 13, borderRadius: 10, padding: '0 10px' };
+const hm = (t?: number) => (t ? clock(t) : '');
+
+/** Is this card finished (its strip hides until the message is tapped)? */
+export function cardFinished(c: Card): boolean {
+  if (c.status === 'done') return true;
+  if (c.kind === 'dinner') return Date.now() - c.createdAt > 12 * 3600000;
+  if (c.kind === 'run') return !!c.orderedAt && Date.now() - c.orderedAt > 6 * 3600000;
+  return false;
+}
+
+/** One small grey line under a message once its card is finished. */
+export function DoneCaption({ c }: { c: Card }) {
+  const s = useStore();
+  const tick = <Icon name="check" size={11} stroke={3} />;
+  let text = '';
+  if (c.kind === 'job') text = `Done by ${c.claimedBy === s.me.id ? 'you' : s.person(c.claimedBy ?? c.createdBy).name}${c.doneAt ? ` · ${hm(c.doneAt)}` : ''}`;
+  else if (c.kind === 'run') text = `${c.orders.length} order${c.orders.length === 1 ? '' : 's'} · ${c.status === 'done' ? 'finished' : 'ordered'}`;
+  else text = 'Dinner sorted';
+  return (
+    <span style={{ fontSize: 12, color: '#8e8e96', display: 'flex', alignItems: 'center', gap: 4, padding: '0 6px' }}>
+      <span style={{ color: '#34c759', display: 'flex' }}>{tick}</span>{text}
+    </span>
+  );
+}
+
 function CardInline({ card: c, toast }: { card: Card; toast: (s: string) => void }) {
   const s = useStore();
   const nav = useNavigate();
-  const box = (border: string, children: React.ReactNode) => (
-    <div style={{ width: 290, background: '#1b1b21', border: `1px solid ${border}`, borderRadius: 20, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>{children}</div>
-  );
 
   if (c.kind === 'run') return <RunInline c={c} toast={toast} />;
 
@@ -338,44 +363,55 @@ function CardInline({ card: c, toast }: { card: Card; toast: (s: string) => void
     const yes = Object.values(d.home).filter((v) => v === 'yes').length;
     const no = Object.values(d.home).filter((v) => v === 'no').length;
     const mineAns = d.home[s.me.id];
-    return box('var(--green)', <>
-      <span className="tag" style={{ color: 'var(--green)', fontSize: 11 }}>Dinner</span>
-      <b>Who's home tonight?</b>
-      <span className="muted">{yes} home · {no} out · {d.forIds.length - yes - no} waiting</span>
-      <div className="row" style={{ gap: 6 }}>
-        <button className={`btn grow ${mineAns === 'yes' ? 'green' : 'ghost'}`} style={{ minHeight: 38, fontSize: 13 }} onClick={() => s.answerHome(c.id, 'yes')}>I'm home</button>
-        <button className={`btn grow ${mineAns === 'no' ? 'light' : 'ghost'}`} style={{ minHeight: 38, fontSize: 13 }} onClick={() => s.answerHome(c.id, 'no')}>Not tonight</button>
+    return (
+      <div style={STRIP}>
+        <span style={{ fontSize: 12, color: '#8e8e96' }}>{yes} home · {no} out · {Math.max(0, d.forIds.length - yes - no)} waiting</span>
+        <div className="row" style={{ gap: 6 }}>
+          <button className={`btn grow ${mineAns ? (mineAns === 'yes' ? 'green' : 'ghost') : 'primary'}`} style={SBTN} onClick={() => s.answerHome(c.id, 'yes')}>I'm home</button>
+          <button className={`btn grow ${mineAns === 'no' ? 'light' : 'ghost'}`} style={SBTN} onClick={() => s.answerHome(c.id, 'no')}>Not tonight</button>
+        </div>
+        <button className="btn quiet" style={{ minHeight: 24, padding: 0, fontSize: 12, alignSelf: 'flex-start' }} onClick={() => nav(`/card/${c.id}`)}>Vote on what to eat ›</button>
       </div>
-      <button className="btn quiet" style={{ minHeight: 30, fontSize: 13 }} onClick={() => nav(`/card/${c.id}`)}>Vote on what to eat →</button>
-    </>);
+    );
   }
 
   const j = c as JobCard;
-  const claimer = j.claimedBy ? s.person(j.claimedBy) : null;
-  const color = j.lift ? 'var(--blue)' : 'var(--purple)';
-  const forMe = j.forIds.includes(s.me.id) || j.forIds.length === 0;
-  return box(j.status === 'done' ? '#2a2a33' : color, <>
-    <div className="between">
-      <span className="tag" style={{ color, fontSize: 11 }}>{j.lift ? 'Lift' : 'Job'}{j.status === 'done' ? ' · done' : ''}</span>
-      {j.due && j.status !== 'done' && <span className="muted" style={{ fontSize: 11 }}>by {new Date(j.due).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}</span>}
-    </div>
-    <b style={{ textDecoration: j.status === 'done' ? 'line-through' : 'none', opacity: j.status === 'done' ? 0.6 : 1 }}>{j.title}</b>
-    {claimer ? (
-      <div className="row" style={{ gap: 8 }}>
-        <Avatar person={claimer} size={24} />
-        <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{j.status === 'done' ? `${claimer.id === s.me.id ? 'You' : claimer.name} did it` : `${claimer.id === s.me.id ? "You've" : `${claimer.name}'s`} got it`}</span>
+  const forMe = j.forIds.includes(s.me.id) || j.forIds.length === 0 || j.forIds.length > 1;
+  const askedRecently = !!j.askedAt && Date.now() - j.askedAt < 10 * 60000;
+  if (j.claimedBy) {
+    const claimer = s.person(j.claimedBy);
+    const mineJob = j.claimedBy === s.me.id;
+    return (
+      <div style={{ ...STRIP, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Avatar person={claimer} size={22} />
+        <span className="grow" style={{ fontSize: 13 }}>{mineJob ? "You're on it" : `${claimer.name} is on it`}</span>
+        {mineJob ? (
+          <button className="btn primary" style={SBTN} onClick={() => s.doneCard(c.id, true)}>Done</button>
+        ) : (
+          <span style={{ fontSize: 12, color: '#8e8e96' }}>{hm(j.claimedAt)}</span>
+        )}
       </div>
-    ) : (
-      <span className="muted">{j.forIds.length === 1 ? `For ${s.person(j.forIds[0]).name}` : 'Anyone'}</span>
-    )}
-    {j.status !== 'done' && (
+    );
+  }
+  const waitingOn = j.forIds.length === 1 ? ` · for ${j.forIds[0] === s.me.id ? 'you' : s.person(j.forIds[0]).name}` : '';
+  const due = j.due ? ` · by ${clock(j.due)}` : '';
+  return (
+    <div style={STRIP}>
+      <span style={{ fontSize: 12, color: '#8e8e96' }}>Not picked up yet{waitingOn}{due}</span>
       <div className="row" style={{ gap: 6 }}>
-        {!j.claimedBy && forMe && j.createdBy !== s.me.id && <button className="btn primary grow" style={{ minHeight: 38, fontSize: 13 }} onClick={() => s.claim(c.id)}>I've got it</button>}
-        {!j.claimedBy && j.createdBy === s.me.id && <span className="muted">Waiting for someone to claim it</span>}
-        {j.claimedBy === s.me.id && <button className="btn green grow" style={{ minHeight: 38, fontSize: 13 }} onClick={() => s.doneCard(c.id, true)}>Done</button>}
+        {forMe && j.createdBy !== s.me.id && (
+          <>
+            <button className="btn primary grow" style={SBTN} onClick={() => s.claim(c.id)}>I'll do it</button>
+            {!j.notMe.includes(s.me.id) && <button className="btn ghost grow" style={SBTN} onClick={() => s.notMe(c.id)}>Can't</button>}
+          </>
+        )}
+        <button className="btn ghost grow" style={SBTN} disabled={askedRecently} onClick={async () => { await s.askAgain(c.id); toast('Asked again'); }}>
+          {askedRecently ? `Asked again ${hm(j.askedAt)}` : 'Ask again'}
+        </button>
       </div>
-    )}
-  </>);
+      {j.notMe.length > 0 && <span style={{ fontSize: 12, color: '#8e8e96' }}>Can't: {j.notMe.map((id) => s.person(id).name).join(', ')}</span>}
+    </div>
+  );
 }
 
 function RunInline({ c, toast }: { c: RunCard; toast: (s: string) => void }) {
@@ -407,50 +443,66 @@ function RunInline({ c, toast }: { c: RunCard; toast: (s: string) => void }) {
     }
   };
 
+  const orderedNames = (() => {
+    const shown = c.orders.slice(0, 3);
+    return shown;
+  })();
+  const isShop = approved.some((x) => SUPERMARKETS.includes(x.shop));
+  const status = c.orderedAt
+    ? `Ordered ${hm(c.orderedAt)}`
+    : c.locked
+      ? 'Locked in'
+      : timeLeft(c.due) === 'closed'
+        ? 'Orders closed'
+        : `closes ${c.due ? clock(c.due) : ''}`;
+  const answeredMe = answered.has(s.me.id);
+
   return (
-    <div style={{ width: 300, background: '#1b1b21', border: `1px solid ${done ? '#2a2a33' : 'var(--accent)'}`, borderRadius: 20, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div className="between">
-        <span className="tag" style={{ color: 'var(--accent)', fontSize: 11 }}>Run · {approved.map((x, i) => placeFor(x.shop, i)?.name ?? x.shop).join(' + ')}</span>
-        <span className="muted" style={{ fontSize: 11 }}>{done ? 'finished' : c.locked ? 'locked in' : timeLeft(c.due) === 'closed' ? 'orders closed' : `closes in ${timeLeft(c.due)}`}</span>
-      </div>
+    <div style={STRIP}>
+      <span style={{ fontSize: 12, color: '#8e8e96' }}>
+        {approved.map((x, i) => placeFor(x.shop, i)?.name ?? x.shop).join(' + ')} · {c.orders.length} order{c.orders.length === 1 ? '' : 's'} · {status}
+      </span>
       <RunPlace c={c} mode="card" />
-      {c.orders.length === 0 && <span className="muted">No orders yet</span>}
-      {c.orders.map((o) => (
-        <div key={o.id} className="row" style={{ gap: 8 }}>
-          <Avatar person={s.person(o.personId)} size={22} />
-          <span className="grow" style={{ fontSize: 13 }}>{o.text}{c.stops.length > 1 ? <span className="muted"> · {o.stop}</span> : null}</span>
+      {orderedNames.map((o) => (
+        <div key={o.id} className="row" style={{ gap: 6 }}>
+          <span className="grow" style={{ fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {o.text} <span style={{ color: '#8e8e96' }}>· {o.personId === s.me.id ? 'you' : s.person(o.personId).name}</span>
+          </span>
           {lateLabel(c, o.at) && <span style={{ fontSize: 11, color: '#ff8a7a', fontWeight: 700 }}>late</span>}
         </div>
       ))}
-      {c.notMe.length > 0 && <span className="muted">Not ordering: {c.notMe.map((id) => s.person(id).name).join(', ')}</span>}
-      {!c.locked && waiting.length > 0 && <span className="muted">Waiting on {waiting.join(', ')}</span>}
+      {c.orders.length > 3 && <span style={{ fontSize: 12, color: '#8e8e96' }}>+{c.orders.length - 3} more</span>}
+      {!c.locked && waiting.length > 0 && <span style={{ fontSize: 12, color: '#8e8e96' }}>Waiting on {waiting.join(', ')}</span>}
       {mineBuyer && pending.map((p) => (
-        <div key={p.shop} className="col" style={{ gap: 6, background: '#2a1a12', borderRadius: 12, padding: 10 }}>
-          <span style={{ fontSize: 13 }}><b>{s.person(p.addedBy).name}</b> wants to add a <b>{p.shop}</b> stop</span>
+        <div key={p.shop} className="col" style={{ gap: 6 }}>
+          <span style={{ fontSize: 13 }}>{s.person(p.addedBy).name} wants {p.shop} too</span>
           <div className="row" style={{ gap: 6 }}>
-            <button className="btn primary grow" style={{ minHeight: 34, fontSize: 13 }} onClick={() => s.answerStop(c.id, p.shop, true)}>Add it</button>
-            <button className="btn ghost grow" style={{ minHeight: 34, fontSize: 13 }} onClick={() => s.answerStop(c.id, p.shop, false)}>No</button>
+            <button className="btn primary grow" style={SBTN} onClick={() => s.answerStop(c.id, p.shop, true)}>Add it</button>
+            <button className="btn ghost grow" style={SBTN} onClick={() => s.answerStop(c.id, p.shop, false)}>No</button>
           </div>
         </div>
       ))}
       {!done && (
         <div className="row" style={{ gap: 6 }}>
           {mineBuyer ? (
-            <button className="btn primary grow" style={{ minHeight: 38, fontSize: 13 }} onClick={() => nav(`/card/${c.id}`)}>{c.locked ? 'Shopping list' : 'See the list'}</button>
+            c.orderedAt ? (
+              <button className="btn ghost grow" style={SBTN} onClick={() => nav(`/card/${c.id}`)}>Add costs</button>
+            ) : (
+              <button className="btn primary grow" style={SBTN} onClick={() => nav(`/order/${c.id}`)}>{isShop ? 'Start shopping' : 'Start ordering'}</button>
+            )
           ) : (
-            <>
-              {!c.locked && <button className="btn primary grow" style={{ minHeight: 38, fontSize: 13 }} onClick={() => nav(`/card/${c.id}`)}>{c.orders.some((o) => o.personId === s.me.id) ? 'Change mine' : 'Add mine'}</button>}
-              {!c.locked && !answered.has(s.me.id) && <button className="btn ghost" style={{ minHeight: 38, fontSize: 13 }} onClick={() => s.notMe(c.id)}>Not me</button>}
-            </>
-          )}
-          {callPlace && mineBuyer && callPlace.phone && (
-            <a className="btn ghost" style={{ minHeight: 38, fontSize: 13, textDecoration: 'none', padding: '0 12px' }} href={`tel:${callPlace.phone.replace(/[^\d+]/g, '')}`} onClick={() => s.markCalled(c.id)}>Call</a>
+            !c.locked && (
+              <>
+                <button className={`btn grow ${answeredMe ? 'ghost' : 'primary'}`} style={SBTN} onClick={() => nav(`/card/${c.id}`)}>{c.orders.some((o) => o.personId === s.me.id) ? 'Change mine' : 'Add mine'}</button>
+                {!answeredMe && <button className="btn ghost" style={SBTN} onClick={() => s.notMe(c.id)}>Not me</button>}
+              </>
+            )
           )}
           {callPlace && !mineBuyer && callPlace.menuUrl && (
-            <a className="btn ghost" style={{ minHeight: 38, fontSize: 13, textDecoration: 'none', padding: '0 12px' }} href={callPlace.menuUrl} target="_blank" rel="noreferrer">Menu</a>
+            <a className="btn ghost" style={{ ...SBTN, textDecoration: 'none' }} href={callPlace.menuUrl} target="_blank" rel="noreferrer">Menu</a>
           )}
           {!c.locked && (
-            <button className="btn ghost" aria-label="Share link to another chat" style={{ minHeight: 38, width: 40, padding: 0 }} onClick={share}><Icon name="share" size={16} /></button>
+            <button className="btn ghost" aria-label="Share link to another chat" style={{ ...SBTN, width: 36, padding: 0 }} onClick={share}><Icon name="share" size={15} /></button>
           )}
         </div>
       )}
@@ -628,16 +680,8 @@ function Composer({ chat, toast }: { chat: Chat; toast: (s: string) => void }) {
     const hasTokens = Object.keys(tokens).length > 0;
     s.learnPhrase(t);
     const msgId = await s.sendMessage(cid, { text: t, tokens: hasTokens ? tokens : undefined });
-    if (!intent) {
-      const ev = chat.kind === 'fun' ? null : detectEvent(t);
-      if (ev) {
-        const days = ev.days.map(dayKey);
-        const eventId = await s.addEvent({ personId: s.me.id, kind: ev.kind, title: ev.title, days, start: ev.startTime, end: ev.endTime, chatId: cid, msgId });
-        const when = describeDays(days) + (ev.startTime ? ` ${ev.startTime}${ev.endTime ? `–${ev.endTime}` : ''}` : '');
-        await s.updateMessage(cid, msgId, { eventId, note: `Added to the calendar: ${ev.title}, ${when}` });
-      }
-      return;
-    }
+    // Dates aren't added automatically any more: they're underlined, and a tap offers Add to calendar.
+    if (!intent) return;
     const others = chat.memberIds.filter((id) => id !== s.me.id);
     if (intent.kind === 'run') {
       if (intent.shop === BOTTLE_SHOP && under18) {
@@ -660,7 +704,7 @@ function Composer({ chat, toast }: { chat: Chat; toast: (s: string) => void }) {
   const showChips = false;
 
   return (
-    <div style={{ borderTop: '1px solid #1f1f26', background: '#0e0e11' }}>
+    <div style={{ borderTop: '1px solid #1f1f26', background: 'var(--bg)' }}>
       {orderOffer && (
         <OfferBar icon="bag" text={<>Add this to <b>{s.person(openRun.createdBy).name}'s {openRun.stops[0].shop} run</b>?</>} yes="Add as my order" onYes={() => send({ asOrder: true })} onNo={() => send()} />
       )}

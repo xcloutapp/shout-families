@@ -67,6 +67,8 @@ export interface RunCard extends CardBase {
   /** When the buyer locked the run in, and when they last tapped Call (orders after either are flagged). */
   lockedAt?: number;
   calledAt?: number;
+  /** The buyer tapped Ordered. */
+  orderedAt?: number;
 }
 
 /** A saved takeaway place: tap Menu or Call from a run. */
@@ -105,6 +107,10 @@ export interface JobCard extends CardBase {
   kind: 'job';
   title: string;
   lift?: boolean;
+  claimedAt?: number;
+  doneAt?: number;
+  /** Last time someone tapped Ask again. */
+  askedAt?: number;
   tokens?: { who?: string; where?: string; when?: string };
 }
 
@@ -163,6 +169,8 @@ export interface Message {
   dismissed?: boolean;
   /** This message added to a shopping list (shows the list). */
   listShop?: string;
+  /** Only notify these people (e.g. "Ordered" goes to the people who ordered). */
+  notifyOnly?: PersonId[];
 }
 
 export interface Share {

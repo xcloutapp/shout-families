@@ -600,10 +600,10 @@ export function useStore() {
     },
     updateCardFields: (id: string, patch: Partial<Card>) => updateDoc(cardRef(id), patch as Record<string, unknown>),
     claim(cardId: string) {
-      updateCard(cardId, (c) => (c.claimedBy ? c : { ...c, status: 'claimed', claimedBy: meId }));
+      updateCard(cardId, (c) => (c.claimedBy ? c : { ...c, status: 'claimed', claimedBy: meId, claimedAt: Date.now() }));
     },
     unclaim(cardId: string) {
-      updateCard(cardId, (c) => ({ ...c, status: 'open', claimedBy: undefined }));
+      updateCard(cardId, (c) => ({ ...c, status: 'open', claimedBy: undefined, claimedAt: undefined }));
     },
     notMe(cardId: string) {
       updateCard(cardId, (c) => ({ ...c, notMe: [...new Set([...c.notMe, meId])] }));
@@ -613,7 +613,26 @@ export function useStore() {
       if (card && card.kind === 'job' && logFavour && card.createdBy !== meId) {
         addLedger([{ owerId: card.createdBy, owedId: meId, favour: card.title, what: card.title }]);
       }
-      updateCard(cardId, (c) => ({ ...c, status: 'done', claimedBy: c.claimedBy ?? meId }));
+      updateCard(cardId, (c) => ({ ...c, status: 'done', claimedBy: c.claimedBy ?? meId, doneAt: Date.now() }));
+    },
+    /** Nobody's picked it up: post it again so it's back at the bottom of the chat and everyone gets notified. */
+    async askAgain(cardId: string) {
+      const card = sess.cards.find((c) => c.id === cardId);
+      if (!card || card.kind !== 'job' || !card.chatId) return;
+      await sendMessage(card.chatId, { text: `Still need someone: ${card.title}`, cardId });
+      updateCard<JobCard>(cardId, (c) => ({ ...c, askedAt: Date.now() }));
+    },
+    /** The buyer has placed the order. Tells only the people who ordered. */
+    async markOrdered(cardId: string) {
+      const card = sess.cards.find((c) => c.id === cardId) as RunCard | undefined;
+      if (!card) return;
+      updateCard<RunCard>(cardId, (c) => ({ ...c, locked: true, lockedAt: c.lockedAt ?? Date.now(), orderedAt: Date.now(), status: 'claimed', claimedBy: c.createdBy }));
+      const placeNames = card.stops.filter((x) => x.approved).map((x) => x.shop).join(' and ');
+      const orderers = [...new Set(card.orders.map((o) => o.personId))].filter((id) => id !== meId && !id.startsWith('guest:'));
+      if (card.chatId) await sendMessage(card.chatId, { text: `Ordered from ${placeNames} ✓`, notifyOnly: orderers });
+    },
+    tickMany(cardId: string, orderIds: string[], ticked: boolean) {
+      updateCard<RunCard>(cardId, (c) => ({ ...c, orders: c.orders.map((o) => (orderIds.includes(o.id) ? { ...o, ticked, missing: undefined } : o)) }));
     },
     deleteCard(cardId: string) {
       deleteDoc(cardRef(cardId));

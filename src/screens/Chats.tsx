@@ -78,44 +78,106 @@ export function PeopleSheet({ onClose }: { onClose: () => void }) {
   );
 }
 
+const STATUS_DOT: Record<StatusLabel, string> = { home: '#34c759', work: '#ffcc00', out: '#0A84FF', away: '#bf5af2' };
+
+/** Chats are named by who's in them; a topic ("Japan trip", "Fun") is a small tag. */
+export function chatTitle(s: ReturnType<typeof useStore>, c: { everyone: boolean; memberIds: string[]; kind: string }) {
+  if (c.everyone) return s.group.name;
+  const others = c.memberIds.filter((id) => id !== s.me.id).map((id) => s.person(id).name);
+  if (!others.length) return 'Just you';
+  return others.length === 1 ? others[0] : `${others.slice(0, -1).join(', ')} & ${others[others.length - 1]}`;
+}
+export const chatTopic = (c: { kind: string; name?: string; everyone: boolean }) => (c.kind === 'fun' ? 'Fun' : c.everyone ? '' : c.name || '');
+
 export function ChatList() {
   const s = useStore();
   const nav = useNavigate();
   const [people, setPeople] = useState(false);
-  const runOpenIn = (cid: string) => s.cards.some((c) => c.chatId === cid && c.kind === 'run' && c.status !== 'done');
+  const [q, setQ] = useState('');
+  const others = s.members.filter((p) => p.id !== s.me.id);
+
+  /** Something in this chat is waiting on me (shown in orange). */
+  const needsMe = (cid: string): string | null => {
+    for (const c of s.cards) {
+      if (c.chatId !== cid || c.status === 'done') continue;
+      if (c.kind === 'run' && !c.locked && c.createdBy !== s.me.id && !c.orders.some((o) => o.personId === s.me.id) && !c.notMe.includes(s.me.id)) return `${c.stops[0]?.shop} run open · add yours`;
+      if (c.kind === 'dinner' && !c.home[s.me.id] && Date.now() - c.createdAt < 12 * 3600000) return 'Dinner · are you home?';
+      if (c.kind === 'job' && !c.claimedBy && c.createdBy !== s.me.id && (c.forIds.length !== 1 || c.forIds[0] === s.me.id)) return `${c.lift ? 'Lift' : 'Job'} needs someone: ${c.title}`;
+    }
+    return null;
+  };
+
+  const openWith = async (pid: string) => {
+    const pair = [s.me.id, pid].sort().join();
+    const same = s.chats.find((c) => c.kind === 'home' && !c.name && [...c.memberIds].sort().join() === pair);
+    if (same) return nav(`/chat/${same.id}`);
+    const id = await s.createChat([pid]);
+    nav(`/chat/${id}`);
+  };
+
+  const shown = s.chats.filter((c) => {
+    if (!q.trim()) return true;
+    const hay = `${chatTitle(s, c)} ${chatTopic(c)} ${c.lastText ?? ''}`.toLowerCase();
+    return hay.includes(q.trim().toLowerCase());
+  });
 
   return (
     <>
-      <div className="screen with-tabs" style={{ gap: 12 }}>
-        <div className="between">
-          <h1 style={{ fontSize: 30 }}>Chats</h1>
-          <button className="icon-btn" aria-label="New chat" style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }} onClick={() => nav('/new-chat')}>
-            <Icon name="pencil" size={20} stroke={2.2} />
-          </button>
+      <div className="screen with-tabs" style={{ gap: 10, paddingBottom: 'calc(var(--tabbar-h) + 70px)' }}>
+        <div className="between" style={{ alignItems: 'center' }}>
+          <span style={{ width: 40 }} />
+          <b style={{ fontSize: 17 }}>Chats</b>
+          <button className="icon-btn" aria-label="Where's everyone" style={{ width: 40, height: 40 }} onClick={() => setPeople(true)}><Icon name="people" size={19} /></button>
         </div>
         <NotifyBanner />
-        <PeopleRow onOpen={() => setPeople(true)} />
-        <div style={{ borderTop: '1px solid #1f1f26', margin: '0 -20px' }}>
-          {s.chats.map((c) => {
-            const members = c.memberIds.filter((id) => id !== s.me.id).map(s.person);
-            const name = c.name || members.map((m) => m.name).join(', ') || 'Just you';
-            const who = c.kind === 'fun' ? 'Reels, TikToks and photos' : c.everyone ? 'Everyone' : members.length === 1 ? 'Just you two' : `You, ${members.map((m) => m.name).join(', ')}`;
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', rowGap: 14, padding: '6px 0 8px' }}>
+          {others.map((p) => {
+            const st = s.status(p.id);
             return (
-              <button key={c.id} onClick={() => nav(`/chat/${c.id}`)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', background: 'none', border: 'none', borderBottom: '1px solid #18181d', textAlign: 'left' }}>
-                <ChatAvatar people={members} fun={c.kind === 'fun'} />
-                <span className="col grow" style={{ gap: 2, minWidth: 0 }}>
-                  <span className="between">
-                    <b style={{ fontSize: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</b>
-                    <span style={{ fontSize: 12, color: '#8a8a95', flexShrink: 0 }}>{when(c.lastAt)}</span>
+              <button key={p.id} onClick={() => openWith(p.id)} style={{ background: 'none', border: 'none', padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                <span style={{ position: 'relative' }}>
+                  <Avatar person={p} size={64} />
+                  {st && <span style={{ position: 'absolute', right: 1, bottom: 1, width: 15, height: 15, borderRadius: 8, background: STATUS_DOT[st], border: '2.5px solid var(--bg)' }} />}
+                </span>
+                <span style={{ fontSize: 12, color: '#c7c7cc' }}>{p.name}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ margin: '0 -20px' }}>
+          {shown.map((c) => {
+            const members = c.memberIds.filter((id) => id !== s.me.id).map(s.person);
+            const topic = chatTopic(c);
+            const alert = needsMe(c.id);
+            return (
+              <button key={c.id} onClick={() => nav(`/chat/${c.id}`)} style={{ width: '100%', display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 16px 0 20px', background: 'none', border: 'none', textAlign: 'left', color: 'var(--text)' }}>
+                <span style={{ paddingTop: 2 }}><ChatAvatar people={members} /></span>
+                <span className="col grow" style={{ gap: 2, minWidth: 0, paddingBottom: 10, borderBottom: '0.5px solid #2a2a2e' }}>
+                  <span className="between" style={{ gap: 8 }}>
+                    <b style={{ fontSize: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chatTitle(s, c)}</b>
+                    <span style={{ fontSize: 14, color: '#8e8e96', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
+                      {alert && <span style={{ width: 8, height: 8, borderRadius: 4, background: 'var(--accent)' }} />}
+                      {when(c.lastAt)} <span style={{ fontSize: 16 }}>›</span>
+                    </span>
                   </span>
-                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>{who}</span>
-                  <span style={{ fontSize: 14, color: runOpenIn(c.id) ? '#ff9a66' : 'var(--text-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {runOpenIn(c.id) ? 'Run open · tap to add your order' : c.lastText ?? ''}
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                    {topic && <span style={{ flexShrink: 0, fontSize: 11, color: '#c7c7cc', background: '#1f1f23', borderRadius: 6, padding: '2px 6px' }}>{topic}</span>}
+                    <span style={{ fontSize: 15, color: '#8e8e96', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.lastText ?? (c.kind === 'fun' ? 'Reels, TikToks and photos' : 'No messages yet')}</span>
                   </span>
+                  {alert && <span style={{ fontSize: 13, color: '#ff9a66', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{alert}</span>}
                 </span>
               </button>
             );
           })}
+        </div>
+      </div>
+      <div style={{ position: 'fixed', left: 0, right: 0, bottom: 'var(--tabbar-h)', padding: '8px 16px', background: 'linear-gradient(transparent, var(--bg) 40%)' }}>
+        <div className="row" style={{ maxWidth: 448, margin: '0 auto', gap: 10 }}>
+          <label style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, background: '#1c1c1f', borderRadius: 999, padding: '0 14px', height: 42 }}>
+            <Icon name="search" size={17} />
+            <input aria-label="Search chats" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: 1, border: 'none', background: 'none', fontSize: 16, outline: 'none', color: 'var(--text)' }} />
+          </label>
+          <button className="icon-btn" aria-label="New chat" style={{ width: 42, height: 42, background: '#1c1c1f' }} onClick={() => nav('/new-chat')}><Icon name="pencil" size={19} /></button>
         </div>
       </div>
       {people && <PeopleSheet onClose={() => setPeople(false)} />}
@@ -123,21 +185,15 @@ export function ChatList() {
   );
 }
 
-function ChatAvatar({ people, fun }: { people: Person[]; fun?: boolean }) {
-  if (fun) {
-    return (
-      <span style={{ width: 52, height: 52, borderRadius: 26, background: '#2a1a12', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <Icon name="spark" size={24} />
-      </span>
-    );
-  }
-  const [a, b] = people;
-  if (!a) return <span style={{ width: 52, height: 52, flexShrink: 0 }} />;
-  if (!b) return <Avatar person={a} size={52} />;
+function ChatAvatar({ people }: { people: Person[] }) {
+  const [a, b, c] = people;
+  if (!a) return <span style={{ width: 50, height: 50, flexShrink: 0 }} />;
+  if (!b) return <Avatar person={a} size={50} />;
   return (
-    <span style={{ width: 52, height: 52, position: 'relative', flexShrink: 0 }}>
-      <span style={{ position: 'absolute', left: 0, top: 0 }}><Avatar person={a} size={36} /></span>
-      <span style={{ position: 'absolute', right: 0, bottom: 0 }}><Avatar person={b} size={36} /></span>
+    <span style={{ width: 50, height: 50, borderRadius: 25, background: '#2c2c30', position: 'relative', flexShrink: 0, display: 'block' }}>
+      <span style={{ position: 'absolute', left: 4, top: 6 }}><Avatar person={a} size={c ? 22 : 26} /></span>
+      <span style={{ position: 'absolute', right: 3, top: c ? 13 : 20 }}><Avatar person={b} size={c ? 20 : 22} /></span>
+      {c && <span style={{ position: 'absolute', left: 13, bottom: 3 }}><Avatar person={c} size={18} /></span>}
     </span>
   );
 }
@@ -204,8 +260,8 @@ export function NewChat() {
         ))}
       </div>
 
-      <input className="input" placeholder="Name it (optional), e.g. The boys" value={name} onChange={(e) => setName(e.target.value)} />
-      <span className="muted" style={{ marginTop: -8 }}>Named chats show up as a quick pick next time.</span>
+      <input className="input" placeholder="Topic (optional), e.g. Japan trip" value={name} onChange={(e) => setName(e.target.value)} />
+      <span className="muted" style={{ marginTop: -8 }}>A topic lets you have more than one chat with the same people.</span>
 
       <div className="grow" />
       <button className="btn big primary" disabled={sel.length === 0} onClick={start}>Start chat</button>

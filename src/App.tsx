@@ -12,6 +12,7 @@ import { Balances, Me } from './screens/Tabs';
 import Calendar from './screens/Calendar';
 import { GroupSetup, Loading, Profile, SignIn, rememberJoin } from './screens/Setup';
 import { TabBar } from './ui';
+import { Ordering, OrderingBar } from './screens/Ordering';
 
 // Shared into Shout from another app's share sheet (Android): ?url=…&text=…
 {
@@ -87,12 +88,14 @@ function Gate() {
   if (phase === 'group') return <GroupSetup />;
   return (
     <>
+    <OrderingBar />
     <Routes>
       <Route path="/" element={<ChatList />} />
       <Route path="/chat/:cid" element={<Thread />} />
       <Route path="/new-chat" element={<NewChat />} />
       <Route path="/new/shout" element={<LogShout />} />
       <Route path="/card/:id" element={<CardScreen />} />
+      <Route path="/order/:id" element={<Ordering />} />
       <Route path="/balances" element={<Balances />} />
       <Route path="/calendar" element={<Calendar />} />
       <Route path="/me" element={<Me />} />

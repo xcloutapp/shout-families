@@ -84,6 +84,26 @@ const paths: Record<string, ReactNode> = {
       <path d="M12 7v6M9 10h6" />
     </>
   ),
+  car: (
+    <>
+      <path d="M5 16v-4l2-5h10l2 5v4z" />
+      <path d="M5 16v2M19 16v2M3 12h18" />
+      <circle cx="8" cy="14" r=".6" />
+      <circle cx="16" cy="14" r=".6" />
+    </>
+  ),
+  search: (
+    <>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="M16 16l4.5 4.5" />
+    </>
+  ),
+  copy: (
+    <>
+      <rect x="8" y="8" width="12" height="12" rx="2" />
+      <path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3" />
+    </>
+  ),
 };
 
 export function Icon({ name, size = 22, stroke = 2 }: { name: keyof typeof paths | string; size?: number; stroke?: number }) {
