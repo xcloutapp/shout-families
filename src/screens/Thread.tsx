@@ -8,7 +8,7 @@ import { BOTTLE_SHOP, SHOPS, SUPERMARKETS } from '../seed';
 import { clock, timeLeft, useStore } from '../store';
 import type { Card, Chat, DinnerCard, JobCard, Message, RunCard, Tokens } from '../types';
 import { Avatar, Icon, Sheet, useToast } from '../ui';
-import { PeopleSheet, chatTitle, chatTopic } from './Chats';
+import { ChatAvatar, PeopleSheet, chatTitle, chatTopic } from './Chats';
 import { JobsSheet } from './Jobs';
 import { ListInline, RunPlace, lateLabel, usePlaceFor } from './Takeaway';
 
@@ -144,7 +144,7 @@ export default function Thread() {
   const title = chatTitle(s, chat);
   const topic = chatTopic(chat);
   const openJobs = s.cards.filter((c) => c.kind === 'job' && c.status !== 'done' && (chat.everyone || c.chatId === chat.id)).length;
-  const subtitle = [topic, openJobs ? `${openJobs} job${openJobs === 1 ? '' : 's'} open` : 'Jobs and people'].filter(Boolean).join(' · ');
+  const subtitle = [topic, openJobs ? `${openJobs} job${openJobs === 1 ? '' : 's'} open` : ''].filter(Boolean).join(' · ');
 
   // Fun chat: my hit rate this week.
   const weekAgo = Date.now() - 7 * 86400000;
@@ -152,22 +152,27 @@ export default function Thread() {
   const liked = myLinks.filter((m) => Object.values(m.reactions ?? {}).includes('good')).length;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - var(--tabbar-h) - var(--top))' }}>
-      <div style={{ padding: '10px 12px', borderBottom: '1px solid #1f1f26', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <button className="icon-btn" aria-label="Back to chats" onClick={() => nav('/')}><Icon name="back" size={18} stroke={2.5} /></button>
-        <button className="col grow" onClick={() => setJobs(true)} style={{ gap: 0, minWidth: 0, background: 'none', border: 'none', padding: 0, alignItems: 'center', color: 'var(--text)' }}>
-          <b style={{ fontSize: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{title} <span style={{ color: '#8e8e96', fontWeight: 400 }}>›</span></b>
-          <span style={{ fontSize: 12, color: '#8e8e96' }}>{subtitle}</span>
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: 'calc(100dvh - var(--top))' }}>
+      {/* Floating header, Messages-style: the conversation scrolls up underneath it. */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 6, padding: '6px 12px 18px', display: 'flex', alignItems: 'flex-start', gap: 10, background: 'linear-gradient(var(--bg) 62%, rgba(0,0,0,0))', pointerEvents: 'none' }}>
+        <button className="icon-btn" aria-label="Back to chats" style={{ pointerEvents: 'auto', marginTop: 8 }} onClick={() => nav('/')}><Icon name="back" size={18} stroke={2.5} /></button>
+        <button className="col grow" onClick={() => setJobs(true)} style={{ pointerEvents: 'auto', gap: 4, minWidth: 0, background: 'none', border: 'none', padding: 0, alignItems: 'center', color: 'var(--text)' }}>
+          <ChatAvatar people={chat.memberIds.filter((id) => id !== s.me.id).map(s.person)} size={46} />
+          <span style={{ background: '#1f1f23', borderRadius: 999, padding: '4px 12px', fontSize: 14, fontWeight: 600, maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {title} <span style={{ color: '#8e8e96', fontWeight: 400 }}>›</span>
+          </span>
+          {subtitle && <span style={{ fontSize: 11, color: '#8e8e96' }}>{subtitle}</span>}
         </button>
-        <button className="icon-btn" aria-label="Where's everyone" onClick={() => setPeople(true)}><Icon name="people" size={20} /></button>
+        <button className="icon-btn" aria-label="Where's everyone" style={{ pointerEvents: 'auto', marginTop: 8 }} onClick={() => setPeople(true)}><Icon name="people" size={20} /></button>
       </div>
+      <div ref={listRef} style={{ flex: 1, overflowY: 'auto', padding: '128px 12px 6px', display: 'flex', flexDirection: 'column', gap: 8, overscrollBehavior: 'contain' }}>
+        <div style={{ flex: '1 0 auto' }} />
       {chat.kind === 'fun' && myLinks.length > 0 && (
-        <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--text-2)', background: '#16161b' }}>
+        <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--text-2)', background: '#16161b', borderRadius: 12, alignSelf: 'center' }}>
           This week, <b style={{ color: 'var(--text)' }}>{liked} of {myLinks.length}</b> of your reels got an "Actually good".
         </div>
       )}
 
-      <div ref={listRef} style={{ flex: 1, overflowY: 'auto', padding: '12px 12px 4px', display: 'flex', flexDirection: 'column', gap: 8, overscrollBehavior: 'contain' }}>
         {msgs.length === 0 && (
           <div className="card flat" style={{ alignItems: 'center', textAlign: 'center', margin: '20px 0' }}>
             <b>{chat.kind === 'fun' ? 'Share reels, TikToks and photos here' : 'Say something to get started'}</b>
@@ -747,7 +752,7 @@ function Composer({ chat, toast }: { chat: Chat; toast: (s: string) => void }) {
   const showChips = false;
 
   return (
-    <div style={{ borderTop: '1px solid #1f1f26', background: 'var(--bg)' }}>
+    <div style={{ background: 'var(--bg)', paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}>
       {orderOffer && (
         <OfferBar icon="bag" text={<>Add this to <b>{s.person(openRun.createdBy).name}'s {openRun.stops[0].shop} run</b>?</>} yes="Add as my order" onYes={() => send({ asOrder: true })} onNo={() => send()} />
       )}

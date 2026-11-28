@@ -185,15 +185,20 @@ export function ChatList() {
   );
 }
 
-function ChatAvatar({ people }: { people: Person[] }) {
+export function ChatAvatar({ people, size = 52 }: { people: Person[]; size?: number }) {
   const [a, b, c] = people;
-  if (!a) return <span style={{ width: 52, height: 52, flexShrink: 0 }} />;
-  if (!b) return <Avatar person={a} size={52} />;
-  const mono = (p: Person, size: number, style: React.CSSProperties) => (
+  const k = size / 52;
+  if (!a) return <span style={{ width: size, height: size, flexShrink: 0 }} />;
+  if (!b) return <Avatar person={a} size={size} />;
+  const mono = (p: Person, sz0: number, st0: React.CSSProperties) => {
+    const size = sz0 * k;
+    const style = Object.fromEntries(Object.entries(st0).map(([key, v]) => [key, typeof v === 'number' ? v * k : v]));
+    return (
     <span style={{ position: 'absolute', width: size, height: size, borderRadius: size / 2, background: 'linear-gradient(180deg, #6d6782, #463f5b)', color: '#fff', fontSize: size * 0.44, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', ...style }}>{p.name[0]?.toUpperCase()}</span>
-  );
+    );
+  };
   return (
-    <span style={{ width: 52, height: 52, borderRadius: 26, background: '#26252a', position: 'relative', flexShrink: 0, display: 'block' }}>
+    <span style={{ width: size, height: size, borderRadius: size / 2, background: '#26252a', position: 'relative', flexShrink: 0, display: 'block' }}>
       {c ? (
         <>
           {mono(a, 24, { left: 6, top: 7 })}

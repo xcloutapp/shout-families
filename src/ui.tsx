@@ -149,6 +149,8 @@ export function TabBar() {
       <Icon name={icon} size={24} stroke={isOn(path) ? 2.4 : 2} />
     </button>
   );
+  // Inside a chat the conversation gets the whole screen, like Messages (the back arrow returns to Chats).
+  if (pathname.startsWith('/chat/')) return null;
   return (
     <div className="tabbar">
       <nav>
