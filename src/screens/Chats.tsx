@@ -123,7 +123,7 @@ export function ChatList() {
 
   return (
     <>
-      <div className="screen with-tabs" style={{ gap: 10, paddingBottom: 'calc(var(--tabbar-h) + 70px)' }}>
+      <div className="screen with-tabs" style={{ gap: 10, paddingBottom: 'calc(var(--tabbar-h) + var(--obar-h, 0px) + 70px)' }}>
         <div className="between" style={{ alignItems: 'center' }}>
           <span style={{ width: 40 }} />
           <b style={{ fontSize: 17 }}>Chats</b>
@@ -171,7 +171,7 @@ export function ChatList() {
           })}
         </div>
       </div>
-      <div style={{ position: 'fixed', left: 0, right: 0, bottom: 'var(--tabbar-h)', padding: '8px 16px', background: 'linear-gradient(transparent, var(--bg) 40%)' }}>
+      <div style={{ position: 'fixed', left: 0, right: 0, bottom: 'calc(var(--tabbar-h) + var(--obar-h, 0px))', padding: '8px 16px', background: 'linear-gradient(transparent, var(--bg) 40%)' }}>
         <div className="row" style={{ maxWidth: 448, margin: '0 auto', gap: 10 }}>
           <label style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, background: '#1c1c1f', borderRadius: 999, padding: '0 14px', height: 42 }}>
             <Icon name="search" size={17} />
@@ -187,13 +187,25 @@ export function ChatList() {
 
 function ChatAvatar({ people }: { people: Person[] }) {
   const [a, b, c] = people;
-  if (!a) return <span style={{ width: 50, height: 50, flexShrink: 0 }} />;
-  if (!b) return <Avatar person={a} size={50} />;
+  if (!a) return <span style={{ width: 52, height: 52, flexShrink: 0 }} />;
+  if (!b) return <Avatar person={a} size={52} />;
+  const mono = (p: Person, size: number, style: React.CSSProperties) => (
+    <span style={{ position: 'absolute', width: size, height: size, borderRadius: size / 2, background: 'linear-gradient(180deg, #6d6782, #463f5b)', color: '#fff', fontSize: size * 0.44, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', ...style }}>{p.name[0]?.toUpperCase()}</span>
+  );
   return (
-    <span style={{ width: 50, height: 50, borderRadius: 25, background: '#2c2c30', position: 'relative', flexShrink: 0, display: 'block' }}>
-      <span style={{ position: 'absolute', left: 4, top: 6 }}><Avatar person={a} size={c ? 22 : 26} /></span>
-      <span style={{ position: 'absolute', right: 3, top: c ? 13 : 20 }}><Avatar person={b} size={c ? 20 : 22} /></span>
-      {c && <span style={{ position: 'absolute', left: 13, bottom: 3 }}><Avatar person={c} size={18} /></span>}
+    <span style={{ width: 52, height: 52, borderRadius: 26, background: '#26252a', position: 'relative', flexShrink: 0, display: 'block' }}>
+      {c ? (
+        <>
+          {mono(a, 24, { left: 6, top: 7 })}
+          {mono(b, 18, { right: 6, top: 12 })}
+          {mono(c, 16, { left: 15, bottom: 5 })}
+        </>
+      ) : (
+        <>
+          {mono(a, 26, { left: 5, top: 7 })}
+          {mono(b, 20, { right: 5, bottom: 8 })}
+        </>
+      )}
     </span>
   );
 }

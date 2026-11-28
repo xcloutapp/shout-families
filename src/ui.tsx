@@ -116,8 +116,8 @@ export function Icon({ name, size = 22, stroke = 2 }: { name: keyof typeof paths
 
 export function Avatar({ person, size = 54, ring, dim }: { person: Person; size?: number; ring?: string; dim?: boolean }) {
   return (
-    <span className="avatar" style={{ width: size, height: size, borderColor: ring && ring !== 'dashed' ? ring : '#3a3a44', borderStyle: ring === 'dashed' ? 'dashed' : 'solid' }}>
-      <span style={{ background: person.color, fontSize: size * 0.3, opacity: dim ? 0.4 : 1 }}>{person.name[0]}</span>
+    <span className={`avatar ${ring ? 'ringed' : ''}`} style={{ width: size, height: size, ...(ring ? { borderColor: ring !== 'dashed' ? ring : '#3a3a44', borderStyle: ring === 'dashed' ? 'dashed' : 'solid' } : {}) }}>
+      <span style={{ fontSize: size * 0.42, opacity: dim ? 0.4 : 1 }}>{person.name[0]?.toUpperCase()}</span>
     </span>
   );
 }

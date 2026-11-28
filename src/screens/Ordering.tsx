@@ -135,23 +135,28 @@ export function Ordering() {
   );
 }
 
-/** Slim bar on every screen while you have a run with orders waiting to be placed. */
+/** Small pill above the bottom buttons (like Now Playing) while you have a recent run waiting to be ordered. */
 export function OrderingBar() {
   const s = useStore();
   const nav = useNavigate();
   const loc = useLocation();
-  const run = s.cards.find((c): c is RunCard => c.kind === 'run' && c.createdBy === s.me.id && c.status !== 'done' && !c.orderedAt && c.orders.length > 0);
-  const show = !!run && !loc.pathname.startsWith('/order/');
+  const run = s.cards.find(
+    (c): c is RunCard => c.kind === 'run' && c.createdBy === s.me.id && c.status !== 'done' && !c.orderedAt && c.orders.length > 0 && Date.now() - c.createdAt < 8 * 3600000,
+  );
+  const show = !!run && !loc.pathname.startsWith('/order/') && !loc.pathname.startsWith('/chat/') && !loc.pathname.startsWith('/card/');
   useEffect(() => {
-    document.documentElement.style.setProperty('--obar-h', show ? '36px' : '0px');
+    document.documentElement.style.setProperty('--obar-h', show ? '52px' : '0px');
   }, [show]);
   if (!show || !run) return null;
   const name = run.stops.filter((x) => x.approved).map((x) => x.shop).join(' + ');
   return (
-    <button onClick={() => nav(`/order/${run.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', height: 36, boxSizing: 'border-box', maxWidth: 480, margin: '0 auto', border: 'none', background: '#2a1a12', color: '#ffb38a', padding: '8px 16px', fontSize: 13, fontWeight: 600, textAlign: 'left' }}>
-      <Icon name="bag" size={16} />
-      <span style={{ flex: 1 }}>You're doing the {name} run · {run.orders.length} order{run.orders.length === 1 ? '' : 's'}</span>
-      <span>Open ›</span>
+    <button
+      onClick={() => nav(`/order/${run.id}`)}
+      style={{ position: 'fixed', left: 12, right: 12, bottom: 'calc(var(--tabbar-h) + 6px)', maxWidth: 456, margin: '0 auto', zIndex: 9, display: 'flex', alignItems: 'center', gap: 10, height: 44, border: 'none', borderRadius: 22, background: '#2a1a12', color: '#ffb38a', padding: '0 16px', fontSize: 14, fontWeight: 600, textAlign: 'left' }}
+    >
+      <Icon name="bag" size={17} />
+      <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name} run · {run.orders.length} order{run.orders.length === 1 ? '' : 's'}</span>
+      <span style={{ flexShrink: 0 }}>Order ›</span>
     </button>
   );
 }

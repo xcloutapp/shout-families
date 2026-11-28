@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { addDays, dayKey, startOfDay, toIcs } from '../dates';
 import { clock, useStore } from '../store';
@@ -51,6 +51,24 @@ export default function Calendar() {
   const [justMe, setJustMe] = useState(false);
   const [adding, setAdding] = useState(false);
   const [open, setOpen] = useState<CalEvent | null>(null);
+  const [slide, setSlide] = useState<'l' | 'r' | null>(null);
+  // Swipe left/right to move a week (the strip and the grid) or a day (the day card).
+  const moveWeek = (n: number) => {
+    setWeekStart((w) => addDays(w, 7 * n));
+    setSel((k) => dayKey(addDays(fromKey(k), 7 * n)));
+    setSlide(n > 0 ? 'l' : 'r');
+  };
+  const moveDay = (n: number) => {
+    const next = addDays(fromKey(sel), n);
+    setSel(dayKey(next));
+    const ws = mondayOf(next);
+    if (+ws !== +weekStart) {
+      setWeekStart(ws);
+      setSlide(n > 0 ? 'l' : 'r');
+    }
+  };
+  const weekSwipe = useSwipe(() => moveWeek(1), () => moveWeek(-1));
+  const daySwipe = useSwipe(() => moveDay(1), () => moveDay(-1));
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const keys = days.map(dayKey);
@@ -80,13 +98,13 @@ export default function Calendar() {
   return (
     <div className="screen with-tabs" style={{ gap: 14 }}>
       <div className="between">
-        <h1 style={{ fontSize: 26 }}>{weekStart.toLocaleDateString('en-AU', { month: 'long' })}</h1>
+        <h1 style={{ fontSize: 26 }}>{fromKey(sel).toLocaleDateString('en-AU', { month: 'long' })}</h1>
         <button className="btn primary" style={{ minHeight: 40 }} onClick={() => setAdding(true)}><Icon name="plus" size={18} stroke={2.6} /> Add</button>
       </div>
 
       <div className="row" style={{ gap: 4 }}>
-        <button className="icon-btn" aria-label="Previous week" style={{ width: 32, height: 64, borderRadius: 12 }} onClick={() => setWeekStart(addDays(weekStart, -7))}><Icon name="back" size={16} stroke={2.5} /></button>
-        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 4 }}>
+        <button className="icon-btn" aria-label="Previous week" style={{ width: 32, height: 64, borderRadius: 12 }} onClick={() => moveWeek(-1)}><Icon name="back" size={16} stroke={2.5} /></button>
+        <div key={`strip-${dayKey(weekStart)}`} {...weekSwipe} className={slide ? `slide-${slide}` : ''} style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 4, touchAction: 'pan-y' }}>
           {days.map((d, i) => {
             const k = keys[i];
             const isSel = k === sel;
@@ -101,7 +119,7 @@ export default function Calendar() {
             );
           })}
         </div>
-        <button className="icon-btn" aria-label="Next week" style={{ width: 32, height: 64, borderRadius: 12 }} onClick={() => setWeekStart(addDays(weekStart, 7))}><Icon name="chevron" size={16} stroke={2.5} /></button>
+        <button className="icon-btn" aria-label="Next week" style={{ width: 32, height: 64, borderRadius: 12 }} onClick={() => moveWeek(1)}><Icon name="chevron" size={16} stroke={2.5} /></button>
       </div>
 
       <div className="row">
@@ -109,7 +127,7 @@ export default function Calendar() {
         <button className={`pill ${justMe ? 'on' : ''}`} onClick={() => setJustMe(true)}>Just me</button>
       </div>
 
-      <div className="card">
+      <div className="card" {...daySwipe} style={{ touchAction: 'pan-y' }}>
         <div className="between">
           <b className="display" style={{ fontSize: 20 }}>{selDate.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' })}</b>
           {sel === dayKey(today) && <span className="tag" style={{ color: 'var(--accent)', fontSize: 11 }}>Today</span>}
@@ -148,8 +166,8 @@ export default function Calendar() {
         ))}
       </div>
 
-      <div className="label">This week</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '36px repeat(7, minmax(0, 1fr))', gap: '6px 3px', alignItems: 'center' }}>
+      <div className="between"><div className="label">{+weekStart === +mondayOf(today) ? 'This week' : `Week of ${weekStart.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}`}</div><span className="muted" style={{ fontSize: 11 }}>Swipe for other weeks</span></div>
+      <div key={`grid-${dayKey(weekStart)}`} {...weekSwipe} className={slide ? `slide-${slide}` : ''} style={{ display: 'grid', gridTemplateColumns: '36px repeat(7, minmax(0, 1fr))', gap: '6px 3px', alignItems: 'center', touchAction: 'pan-y' }}>
         <span />
         {days.map((d, i) => (
           <span key={keys[i]} style={{ fontSize: 10, textAlign: 'center', color: keys[i] === sel ? 'var(--accent)' : 'var(--muted)', fontWeight: 700 }}>{d.toLocaleDateString('en-AU', { weekday: 'narrow' })}</span>
@@ -249,4 +267,26 @@ function AddEvent({ defaultDay, onClose, onSaved }: { defaultDay: string; onClos
       <button className="btn big primary" onClick={save}>Add</button>
     </Sheet>
   );
+}
+
+/** Left/right swipe with a finger (ignores mostly-vertical scrolls). */
+function useSwipe(onLeft: () => void, onRight: () => void) {
+  const start = useRef<{ x: number; y: number } | null>(null);
+  return {
+    onTouchStart: (e: React.TouchEvent) => {
+      const t = e.touches[0];
+      start.current = { x: t.clientX, y: t.clientY };
+    },
+    onTouchEnd: (e: React.TouchEvent) => {
+      const s0 = start.current;
+      start.current = null;
+      if (!s0) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - s0.x;
+      const dy = t.clientY - s0.y;
+      if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      if (dx < 0) onLeft();
+      else onRight();
+    },
+  };
 }
