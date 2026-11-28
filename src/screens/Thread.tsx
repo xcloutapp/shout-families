@@ -333,7 +333,7 @@ const hm = (t?: number) => (t ? clock(t) : '');
 export function cardFinished(c: Card): boolean {
   if (c.status === 'done') return true;
   if (c.kind === 'dinner') return Date.now() - c.createdAt > 12 * 3600000;
-  if (c.kind === 'run') return !!c.orderedAt && Date.now() - c.orderedAt > 6 * 3600000;
+  if (c.kind === 'run') return c.orderedAt ? Date.now() - c.orderedAt > 6 * 3600000 : Date.now() - c.createdAt > 12 * 3600000;
   return false;
 }
 
@@ -459,8 +459,12 @@ function RunInline({ c, toast }: { c: RunCard; toast: (s: string) => void }) {
 
   return (
     <div style={STRIP}>
-      <span style={{ fontSize: 12, color: '#8e8e96' }}>
-        {approved.map((x, i) => placeFor(x.shop, i)?.name ?? x.shop).join(' + ')} · {c.orders.length} order{c.orders.length === 1 ? '' : 's'} · {status}
+      <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>
+        <span style={{ color: 'var(--accent)', display: 'flex' }}><Icon name="bag" size={16} /></span>
+        {approved.map((x, i) => placeFor(x.shop, i)?.name ?? x.shop).join(' + ')}
+      </span>
+      <span style={{ fontSize: 12, color: '#8e8e96', marginTop: -3 }}>
+        {c.orders.length} order{c.orders.length === 1 ? '' : 's'} · {status}
       </span>
       <RunPlace c={c} mode="card" />
       {orderedNames.map((o) => (
